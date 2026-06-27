@@ -9,7 +9,6 @@ import {
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { transcribeAudioBuffer } from '../../services/snwolley/speech-to-text.service';
-import { translateToEnglish, isEnglishLanguage } from '../../services/snwolley/translate.service';
 import { fetchMedia } from '../../services/storage/storage.service';
 import {
   CreateResponseInput,
@@ -196,20 +195,12 @@ async function runTranscription(
     const result = await transcribeAudioBuffer(buffer, filename, language ?? undefined);
 
     let transcript = result.transcript;
-    let correctedTranscript: string | null = null;
-
-    if (!isEnglishLanguage(language)) {
-      const { english, translated } = await translateToEnglish(transcript, language);
-      if (translated && english) {
-        correctedTranscript = english;
-      }
-    }
 
     const updated = await prisma.voiceResponse.update({
       where: { id: responseId },
       data: {
         transcript,
-        correctedTranscript,
+        correctedTranscript: null,
         sttSessionId: result.sttSessionId,
         processingStatus: ProcessingStatus.COMPLETED,
         errorMessage: null,
@@ -222,7 +213,7 @@ async function runTranscription(
       data: {
         processingStatus: ProcessingStatus.COMPLETED,
         sessionId: result.sttSessionId,
-        responseContent: (correctedTranscript ?? transcript).slice(0, 2000),
+        responseContent: transcript.slice(0, 2000),
         httpStatus: 200,
         completedAt: new Date(),
       },

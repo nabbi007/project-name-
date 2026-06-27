@@ -26,6 +26,17 @@ const STEP_TO_QUESTION: Record<VoiceStep, QuestionType> = {
   DESCRIPTION: 'ADDITIONAL_INFORMATION',
 };
 
+/** Normalize farmer locale for the API `language` field (API.md §3.5). */
+export function normalizeVoiceLanguage(language?: string | null): string {
+  if (!language) return 'en';
+  const code = language.trim().toLowerCase();
+  if (code === 'english' || code === 'eng') return 'en';
+  if (code === 'twi') return 'tw';
+  if (code === 'gaa') return 'ga';
+  if (code === 'ewe') return 'ee';
+  return code.length <= 5 ? code : 'en';
+}
+
 export interface VoiceSession {
   _id: string;
   farmerId: string;
@@ -39,6 +50,7 @@ interface RawVoiceResponse {
   transcript?: string | null;
   correctedTranscript?: string | null;
   processingStatus: string;
+  errorMessage?: string | null;
 }
 
 interface RawVoiceSession {
@@ -61,27 +73,35 @@ function mapSession(raw: RawVoiceSession): VoiceSession {
   };
 }
 
-function pickTranscript(response: RawVoiceResponse): string {
-  const english = (response.correctedTranscript ?? '').trim();
-  if (english) return english;
-  return (response.transcript ?? '').trim();
-}
-
-function pickOriginalTranscript(response: RawVoiceResponse): string | undefined {
-  const original = (response.transcript ?? '').trim();
-  const english = (response.correctedTranscript ?? '').trim();
-  if (original && english && original !== english) return original;
-  if (original && !english && response.processingStatus === 'COMPLETED') return original;
-  return undefined;
-}
-
 export interface UploadVoiceResponseResult {
   transcript: string;
-  originalTranscript?: string;
   step: VoiceStep;
   responseId: string;
   transcriptionFailed?: boolean;
-  translationMissing?: boolean;
+  errorMessage?: string;
+}
+
+function parseVoiceResponse(response: RawVoiceResponse, step: VoiceStep): UploadVoiceResponseResult {
+  const transcript = (response.correctedTranscript ?? response.transcript ?? '').trim();
+  const transcriptionFailed =
+    response.processingStatus === 'FAILED' ||
+    (response.processingStatus === 'COMPLETED' && !transcript);
+
+  return {
+    transcript,
+    step,
+    responseId: response.uuid,
+    transcriptionFailed,
+    errorMessage: response.errorMessage ?? undefined,
+  };
+}
+
+async function transcribeResponse(responseId: string): Promise<RawVoiceResponse> {
+  const { data } = await apiClient.post<{
+    success: boolean;
+    data: { response: RawVoiceResponse };
+  }>(`/voice-responses/${responseId}/transcribe`, {}, { timeout: 120000 });
+  return data.data.response;
 }
 
 export const voiceApi = {
@@ -97,6 +117,8 @@ export const voiceApi = {
     sessionId: string,
     payload: { audioBlob: Blob; step: VoiceStep; language: string }
   ): Promise<UploadVoiceResponseResult> => {
+    const language = normalizeVoiceLanguage(payload.language);
+
     let uploadBlob: Blob = payload.audioBlob;
     let uploadName = `recording-${payload.step}.webm`;
     try {
@@ -109,7 +131,7 @@ export const voiceApi = {
     const formData = new FormData();
     formData.append('audio', uploadBlob, uploadName);
     formData.append('questionType', STEP_TO_QUESTION[payload.step]);
-    formData.append('language', payload.language || 'en');
+    formData.append('language', language);
 
     const { data: uploadData } = await apiClient.post<{
       success: boolean;
@@ -118,26 +140,19 @@ export const voiceApi = {
       timeout: 120000,
     });
 
-    const response = uploadData.data.response;
-    const responseId = response.uuid;
-    const originalTranscript = pickOriginalTranscript(response);
-    const transcript = pickTranscript(response);
-    const hasOriginal = Boolean((response.transcript ?? '').trim());
-    const hasEnglish = Boolean((response.correctedTranscript ?? '').trim());
-    const transcriptionFailed =
-      response.processingStatus === 'FAILED' ||
-      (response.processingStatus === 'COMPLETED' && !hasOriginal && !hasEnglish);
-    const translationMissing =
-      !transcriptionFailed && hasOriginal && !hasEnglish && Boolean(originalTranscript);
+    let response = uploadData.data.response;
+    let parsed = parseVoiceResponse(response, payload.step);
 
-    return {
-      transcript,
-      originalTranscript,
-      step: payload.step,
-      responseId,
-      transcriptionFailed,
-      translationMissing,
-    };
+    if (parsed.transcriptionFailed && response.uuid) {
+      try {
+        response = await transcribeResponse(response.uuid);
+        parsed = parseVoiceResponse(response, payload.step);
+      } catch {
+        // Agent can retry or type manually.
+      }
+    }
+
+    return parsed;
   },
 
   retryTranscription: async (responseId: string): Promise<UploadVoiceResponseResult> => {
@@ -146,25 +161,7 @@ export const voiceApi = {
       data: { response: RawVoiceResponse };
     }>(`/voice-responses/${responseId}/retry`, {}, { timeout: 120000 });
 
-    const response = data.data.response;
-    const originalTranscript = pickOriginalTranscript(response);
-    const transcript = pickTranscript(response);
-    const hasOriginal = Boolean((response.transcript ?? '').trim());
-    const hasEnglish = Boolean((response.correctedTranscript ?? '').trim());
-    const transcriptionFailed =
-      response.processingStatus === 'FAILED' ||
-      (response.processingStatus === 'COMPLETED' && !hasOriginal && !hasEnglish);
-    const translationMissing =
-      !transcriptionFailed && hasOriginal && !hasEnglish && Boolean(originalTranscript);
-
-    return {
-      transcript,
-      originalTranscript,
-      step: 'CROP',
-      responseId: response.uuid,
-      transcriptionFailed,
-      translationMissing,
-    };
+    return parseVoiceResponse(data.data.response, 'CROP');
   },
 
   editVoiceResponse: async (
@@ -173,10 +170,10 @@ export const voiceApi = {
     editedTranscript: string,
     responseId?: string
   ): Promise<void> => {
+    const body = { transcript: editedTranscript };
+
     if (responseId) {
-      await apiClient.patch(`/voice-responses/${responseId}/transcript`, {
-        correctedTranscript: editedTranscript,
-      });
+      await apiClient.patch(`/voice-responses/${responseId}/transcript`, body);
       return;
     }
 
@@ -187,11 +184,10 @@ export const voiceApi = {
     const match = data.data.session.responses?.find((r) => r.questionType === questionType);
     if (!match?.uuid) return;
 
-    await apiClient.patch(`/voice-responses/${match.uuid}/transcript`, {
-      correctedTranscript: editedTranscript,
-    });
+    await apiClient.patch(`/voice-responses/${match.uuid}/transcript`, body);
   },
 
-  /** No dedicated complete endpoint — extraction reads completed session responses. */
-  completeVoiceSession: async (_sessionId: string): Promise<void> => {},
+  completeVoiceSession: async (sessionId: string): Promise<void> => {
+    await apiClient.post(`/voice-sessions/${sessionId}/complete`, {});
+  },
 };

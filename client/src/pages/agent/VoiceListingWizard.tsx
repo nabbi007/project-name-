@@ -104,9 +104,8 @@ const VoiceListingWizard: React.FC = () => {
   const [voiceMode, setVoiceMode] = useState<VoiceMode>('record');
   const [voiceStepIndex, setVoiceStepIndex] = useState(0);
   const [transcript, setTranscript] = useState('');
-  const [originalTranscript, setOriginalTranscript] = useState<string | undefined>();
   const [transcriptStatus, setTranscriptStatus] = useState<TranscriptStatus>('idle');
-  const [translationMissing, setTranslationMissing] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | undefined>();
   const [retryPending, setRetryPending] = useState(false);
   const [acceptedTranscripts, setAcceptedTranscripts] = useState<AcceptedTranscript[]>([]);
   const [showRecorder, setShowRecorder] = useState(true);
@@ -229,6 +228,27 @@ const VoiceListingWizard: React.FC = () => {
     return () => clearInterval(interval);
   }, [extracting]);
 
+  const persistAcceptedAnswer = async (text: string, responseId: string) => {
+    if (!sessionId || !currentVoiceStep) return;
+    try {
+      await voiceApi.editVoiceResponse(
+        sessionId,
+        currentVoiceStep.step,
+        text,
+        responseId
+      );
+    } catch {
+      // continue locally
+    }
+    setAcceptedTranscripts((prev) => {
+      const filtered = prev.filter((t) => t.step !== currentVoiceStep.step);
+      return [
+        ...filtered,
+        { step: currentVoiceStep.step, label: currentVoiceStep.label, transcript: text },
+      ];
+    });
+  };
+
   const handleRecordingComplete = async (blob: Blob) => {
     if (!sessionId || !farmer || !currentVoiceStep) return;
     setShowRecorder(false);
@@ -241,15 +261,20 @@ const VoiceListingWizard: React.FC = () => {
         language: farmer.preferredLanguage ?? 'en',
       });
       setLastResponseId(result.responseId);
+
+      if (!result.transcriptionFailed && result.transcript.trim()) {
+        await persistAcceptedAnswer(result.transcript, result.responseId);
+        advanceVoiceQuestion();
+        return;
+      }
+
       setTranscript(result.transcript);
-      setOriginalTranscript(result.originalTranscript);
-      setTranslationMissing(Boolean(result.translationMissing));
+      setTranscriptError(result.errorMessage);
       setTranscriptStatus(result.transcriptionFailed ? 'failed' : 'done');
     } catch {
       setLastResponseId(null);
       setTranscript('');
-      setOriginalTranscript(undefined);
-      setTranslationMissing(false);
+      setTranscriptError(undefined);
       setTranscriptStatus('failed');
     }
   };
@@ -261,8 +286,14 @@ const VoiceListingWizard: React.FC = () => {
     try {
       const result = await voiceApi.retryTranscription(lastResponseId);
       setTranscript(result.transcript);
-      setOriginalTranscript(result.originalTranscript);
-      setTranslationMissing(Boolean(result.translationMissing));
+      setTranscriptError(result.errorMessage);
+
+      if (!result.transcriptionFailed && result.transcript.trim()) {
+        await persistAcceptedAnswer(result.transcript, lastResponseId);
+        advanceVoiceQuestion();
+        return;
+      }
+
       setTranscriptStatus(result.transcriptionFailed ? 'failed' : 'done');
     } catch {
       setTranscriptStatus('failed');
@@ -272,33 +303,16 @@ const VoiceListingWizard: React.FC = () => {
   };
 
   const handleAcceptTranscript = async (editedTranscript: string) => {
-    if (!sessionId || !currentVoiceStep) return;
-    try {
-      await voiceApi.editVoiceResponse(
-        sessionId,
-        currentVoiceStep.step,
-        editedTranscript,
-        lastResponseId ?? undefined
-      );
-    } catch {
-      // continue locally
-    }
-    setAcceptedTranscripts((prev) => {
-      const filtered = prev.filter((t) => t.step !== currentVoiceStep.step);
-      return [
-        ...filtered,
-        { step: currentVoiceStep.step, label: currentVoiceStep.label, transcript: editedTranscript },
-      ];
-    });
-    setShowRecorder(false);
+    if (!lastResponseId) return;
+    await persistAcceptedAnswer(editedTranscript, lastResponseId);
+    advanceVoiceQuestion();
   };
 
   const advanceVoiceQuestion = () => {
     setShowRecorder(true);
     setTranscript('');
-    setOriginalTranscript(undefined);
     setTranscriptStatus('idle');
-    setTranslationMissing(false);
+    setTranscriptError(undefined);
     setLastResponseId(null);
     if (voiceStepIndex < VOICE_STEPS.length - 1) {
       setVoiceStepIndex((i) => i + 1);
@@ -316,9 +330,8 @@ const VoiceListingWizard: React.FC = () => {
     setVoiceMode('record');
     setShowRecorder(true);
     setTranscript('');
-    setOriginalTranscript(undefined);
     setTranscriptStatus('idle');
-    setTranslationMissing(false);
+    setTranscriptError(undefined);
     setLastResponseId(null);
   };
 
@@ -502,7 +515,7 @@ const VoiceListingWizard: React.FC = () => {
         <div className="card p-6 space-y-4">
           <h1 className="text-xl font-bold">Who is this listing for?</h1>
           <p className="text-surface-600 text-sm">
-            Record short answers in {langLabel}. Type the English meaning after each recording.
+            Record the farmer's answers in {langLabel}. Each answer is saved automatically.
           </p>
           <div className="bg-surface-50 rounded-lg p-4">
             <p className="text-lg font-semibold">{farmer.fullName}</p>
@@ -573,28 +586,25 @@ const VoiceListingWizard: React.FC = () => {
           {!showRecorder && (
             <TranscriptEditor
               transcript={transcript}
-              originalTranscript={originalTranscript}
-              sourceLanguageLabel={langLabel}
               status={transcriptStatus}
-              translationMissing={translationMissing}
+              errorMessage={transcriptError}
               onAccept={handleAcceptTranscript}
               onRetryTranscription={lastResponseId ? handleRetryTranscription : undefined}
               retryPending={retryPending}
               onRecordAgain={() => {
                 setShowRecorder(true);
                 setTranscript('');
-                setOriginalTranscript(undefined);
                 setTranscriptStatus('idle');
-                setTranslationMissing(false);
+                setTranscriptError(undefined);
               }}
             />
           )}
-          {currentVoiceStep.optional && !isCurrentStepAccepted && (
+          {currentVoiceStep.optional && !isCurrentStepAccepted && !showRecorder && (
             <Button size="lg" variant="secondary" className="w-full" onClick={skipOptionalQuestion}>
               Skip optional question
             </Button>
           )}
-          {isCurrentStepAccepted && (
+          {isCurrentStepAccepted && showRecorder && (
             <Button size="lg" className="w-full" onClick={advanceVoiceQuestion}>
               {voiceStepIndex < VOICE_STEPS.length - 1 ? 'Next question' : 'Review answers'}
             </Button>

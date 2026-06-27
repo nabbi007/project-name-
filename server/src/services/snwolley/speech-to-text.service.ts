@@ -27,7 +27,7 @@ export function normalizeSttLanguage(language?: string): string {
   const code = language.trim().toLowerCase();
   if (code === 'en' || code === 'english') return 'en';
   if (code === 'twi' || code === 'tw') return 'tw';
-  if (code === 'ga') return 'ga';
+  if (code === 'ga' || code === 'gaa') return 'ga';
   if (code === 'ewe' || code === 'ee') return 'ee';
   return code.length <= 5 ? code : DEFAULT_LANGUAGE;
 }
@@ -142,8 +142,16 @@ export async function transcribeAudioBuffer(
 
   try {
     return await callStt(buildSttForm(buffer, filename, primaryLang));
-  } catch (error) {
-    throw error instanceof AppError ? error : mapAxiosError(error);
+  } catch (primaryError) {
+    if (primaryLang === DEFAULT_LANGUAGE) {
+      throw primaryError instanceof AppError ? primaryError : mapAxiosError(primaryError);
+    }
+    // Snwolley STT often only accepts `en` — retry before manual fallback.
+    try {
+      return await callStt(buildSttForm(buffer, filename, DEFAULT_LANGUAGE));
+    } catch {
+      throw primaryError instanceof AppError ? primaryError : mapAxiosError(primaryError);
+    }
   }
 }
 
