@@ -107,13 +107,13 @@ Legend: 🔓 public · 🔑 authenticated · roles in (parentheses).
 - Public registration **always** creates a `BUYER`; a `role` in the body is ignored.
 - Login is by **email** (not phone). Suspended accounts get HTTP 403 `ACCOUNT_SUSPENDED`. Bad credentials get HTTP 401 `INVALID_CREDENTIALS`.
 
-### 3.3 Admin (auth + ADMIN)
+### 3.3 Admin — agent creation (auth + ADMIN)
 
 | Method | Path | Body | Returns |
 | --- | --- | --- | --- |
 | POST | `/admin/agents` | `{ name, email, password, phone? }` | `{ agent }` (role FIELD_AGENT) |
 
-> Only admins create field agents. (Full admin dashboard/moderation is Phase 11, not yet built.)
+> Full admin dashboard, moderation, complaints, and AI monitoring are in §3.14.
 
 ### 3.4 Farmers (auth + FIELD_AGENT/ADMIN)
 
@@ -139,6 +139,7 @@ Field agents only see/modify their own farmers; admins see all. Accessing anothe
 | POST | `/voice-responses/:responseId/transcribe` | — | `{ response }` (calls Snwolley STT) |
 | POST | `/voice-responses/:responseId/retry` | — | `{ response }` |
 | PATCH | `/voice-responses/:responseId/transcript` | `{ transcript?, correctedTranscript? }` | `{ response }` |
+| POST | `/voice-sessions/:sessionId/complete` | — | `{ session }` (sets status `COMPLETED`) |
 
 - `questionType`: `CROP | QUANTITY | UNIT | AVAILABILITY_DATE | PRICE | ADDITIONAL_INFORMATION`.
 - Audio upload: allowed types wav/mp3/m4a/aac/ogg/webm/3gp, max **25 MB**. Field name must be `audio`.
@@ -221,15 +222,29 @@ Buyers place and cancel orders; field agents/admins fulfil them. Placing an orde
 | GET | `/orders` | FIELD_AGENT/ADMIN | `?status=&page=&limit=` | paginated managed orders (for the agent's listings) |
 | GET | `/orders/:orderId` | any participant | — | `{ order }` (buyer=own, agent=their listings, admin=all) |
 | PATCH | `/orders/:orderId/cancel` | BUYER | — | `{ order }` (only while PENDING/CONFIRMED) |
+| POST | `/orders/:orderId/farmer-confirmation` | FIELD_AGENT/ADMIN | — | `{ order }` (PENDING → CONFIRMED) |
 | PATCH | `/orders/:orderId/status` | FIELD_AGENT/ADMIN | `{ status, notes? }` | `{ order }` |
 
 - `deliveryMethod`: `PICKUP` (default) · `DELIVERY`. `paymentMethod`: `PAY_ON_PICKUP` (default) · `CASH_ON_DELIVERY` · `SIMULATED_MOMO` (sets `paymentStatus=SIMULATED_PAID`).
 - `status`: `PENDING | CONFIRMED | AWAITING_COLLECTION | READY_FOR_PICKUP | IN_TRANSIT | COLLECTED | DELIVERED | COMPLETED | CANCELLED | DISPUTED`.
 - Allowed agent transitions: PENDING→CONFIRMED/CANCELLED; CONFIRMED→AWAITING_COLLECTION/READY_FOR_PICKUP/IN_TRANSIT/CANCELLED; AWAITING_COLLECTION|READY_FOR_PICKUP→COLLECTED/CANCELLED; IN_TRANSIT→DELIVERED/CANCELLED; COLLECTED|DELIVERED→COMPLETED/DISPUTED. Invalid jumps return 400 `INVALID_STATUS_TRANSITION`.
 - An order is single-listing. `order.items[]` each carry `quantity`, `unitPrice`, `subtotal`, and the listing/farmer summary. `order.statusHistory[]` records every change. Farmer phone is not included.
+- `POST /orders/:orderId/farmer-confirmation` records that the farmer acknowledged the order via the field agent. Only works while status is `PENDING`; idempotent if already `CONFIRMED`.
 - Over-ordering returns 400 `INSUFFICIENT_STOCK`.
 
-### 3.12 Generated audio / TTS notifications (auth + FIELD_AGENT/ADMIN)
+### 3.12 Complaints (🔑 auth)
+
+| Method | Path | Access | Body | Returns |
+| --- | --- | --- | --- | --- |
+| POST | `/complaints` | BUYER | `{ orderId, message }` or `{ orderId, description, category? }` | `{ complaint }` |
+| GET | `/admin/complaints` | ADMIN | `?status=&page=&limit=` | paginated complaints |
+| PATCH | `/admin/complaints/:complaintId` | ADMIN | `{ status, resolution? }` | `{ complaint }` |
+
+- `status`: `OPEN | IN_REVIEW | RESOLVED | REJECTED`. Resolving requires a `resolution` string.
+- Buyers can only file complaints on their own orders. One open complaint per order (`COMPLAINT_EXISTS` if duplicate).
+- Complaint payload includes `order: { uuid, orderNumber, status, totalAmount }` and `buyer: { uuid, name }`.
+
+### 3.13 Generated audio / TTS notifications (auth + FIELD_AGENT/ADMIN)
 
 Generates spoken (WAV) notifications for farmers via Snwolley TTS.
 
@@ -239,12 +254,13 @@ Generates spoken (WAV) notifications for farmers via Snwolley TTS.
 | POST | `/orders/:orderId/audio` | `{ messageType: NEW_ORDER\|ORDER_CANCELLED, language? }` | `{ audio }` |
 | GET | `/generated-audio/:audioId` | — | `{ audio }` |
 | PATCH | `/generated-audio/:audioId/played` | — | `{ audio }` (sets `playedAt`) |
+| PATCH | `/generated-audio/:audioId/farmer-confirmed` | — | `{ audio }` (sets `farmerConfirmedAt`) |
 
-- `audio`: `{ uuid, messageType, textContent, audioPath, processingStatus, playedAt, createdAt }`.
+- `audio`: `{ uuid, messageType, textContent, audioPath, processingStatus, playedAt, farmerConfirmedAt, createdAt }`.
 - `processingStatus`: `PENDING | PROCESSING | COMPLETED | FAILED`. The WAV is at `audioPath` — a Cloudinary HTTPS URL (or a relative `uploads/generated-audio/<id>.wav` path in local-fallback mode). See "Media URLs (Cloudinary)" below.
 - Buyers cannot access generated audio (farmer-facing). TTS failures return handled `TTS_*` codes, never a 500.
 
-### 3.13 Administration (auth + ADMIN)
+### 3.14 Administration (auth + ADMIN)
 
 | Method | Path | Body / Query | Returns |
 | --- | --- | --- | --- |
@@ -253,11 +269,15 @@ Generates spoken (WAV) notifications for farmers via Snwolley TTS.
 | GET | `/admin/users` | `?role=&status=&search=&page=&limit=` | paginated users |
 | PATCH | `/admin/users/:userId/status` | `{ status: ACTIVE\|SUSPENDED }` | `{ user }` |
 | GET | `/admin/ai-runs` | `?apiType=&processingStatus=&page=&limit=` | paginated AI processing logs |
+| POST | `/admin/ai-runs/:runId/retry` | — | `{ run }` (re-dispatches failed AI job) |
+| GET | `/admin/complaints` | `?status=&page=&limit=` | paginated complaints (see §3.12) |
+| PATCH | `/admin/complaints/:complaintId` | `{ status, resolution? }` | `{ complaint }` |
 | PATCH | `/admin/listings/:listingId/moderate` | `{ decision: APPROVE\|REJECT, reason? }` | `{ listing }` |
 
 - `/admin/stats` returns `{ users:{ total, byRole }, farmers:{ total, byStatus }, listings:{ total, byStatus }, orders:{ total, byStatus, completedRevenue }, ai:{ total, byStatus } }`.
 - Admins cannot change their own status (400 `SELF_STATUS_CHANGE`). Suspended users cannot log in.
 - Moderation: `REJECT` → `REJECTED`; `APPROVE` → `PUBLISHED` (admin override). `apiType`: `SPEECH_TO_TEXT | AGENT_CHAT | VISION | TEXT_TO_SPEECH`.
+- AI retry re-invokes the original handler: STT → transcribe, VISION → analyse, AGENT_CHAT → extract listing, TTS → re-synthesise audio.
 
 ---
 
@@ -297,9 +317,13 @@ The current client stubs assume a different (Mongo-style) contract. Please recon
 | Listing fields `crop`, `imageUrl`, `expiryDate`, `visionObservation` | `cropCategory.name`, `images[].imagePath`, `expiresAt`, `visualObservation` (string) + `visionDescription` | Map field names |
 | Listing status `ANALYZING/NEEDS_HUMAN_REVIEW` | image `status` + `cropMatchStatus` separate enums | See §3.8 |
 | Pagination `data.{listings,page,total}` | `data: []` + `pagination: { page, limit, total, totalPages }` | Read `pagination` |
-| Orders status `PLACED/REJECTED`, `totalPrice`, `farmerConfirmed` | Backend statuses `PENDING/CONFIRMED/…` (no PLACED/REJECTED), `totalAmount`, `statusHistory[]` (see §3.11). `paymentMethod` SIMULATED_MOMO is accepted | Map status names + `totalAmount`; treat cancel as PATCH `/orders/:id/cancel` |
+| Orders status `PLACED/REJECTED`, `totalPrice`, `farmerConfirmed` | Backend statuses `PENDING/CONFIRMED/…` (no PLACED/REJECTED), `totalAmount`, `statusHistory[]` (see §3.11). Farmer ack via `POST /orders/:id/farmer-confirmation` | Map status names + `totalAmount` |
+| `GET /admin/dashboard` | `GET /admin/stats` | Rename path |
+| `GET /admin/agents` + `PATCH /admin/agents/:id/status` | `GET /admin/users?role=FIELD_AGENT` + `PATCH /admin/users/:id/status` | Filter users by role |
+| Complaint status `INVESTIGATING` | `IN_REVIEW` | Map enum value |
+| `POST /complaints` with `{ orderId, message }` | Supported — `message` maps to `description` | Already compatible |
 
-All phases (marketplace §3.10, orders §3.11, audio §3.12, admin §3.13) are now documented above.
+All phases (marketplace §3.10, orders §3.11, complaints §3.12, audio §3.13, admin §3.14) are documented above.
 
 ---
 

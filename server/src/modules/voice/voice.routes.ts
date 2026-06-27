@@ -12,6 +12,7 @@ import {
   transcribe,
   retry,
   correctTranscript,
+  complete,
 } from './voice.controller';
 import { extract as extractListing } from '../listings/listings.controller';
 
@@ -44,6 +45,7 @@ voiceSessionRoutes.post(
   ...guard,
   asyncHandler(extractListing)
 );
+voiceSessionRoutes.post('/:sessionId/complete', ...guard, asyncHandler(complete));
 
 // Mounted at /api/voice-responses
 export const voiceResponseRoutes = Router();

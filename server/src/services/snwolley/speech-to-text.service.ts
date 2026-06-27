@@ -65,7 +65,8 @@ function extractTranscript(data: any): string {
 }
 
 function extractSessionId(data: any): string | null {
-  return data?.session_id ?? data?.sessionId ?? null;
+  const id = data?.session_id ?? data?.sessionId ?? null;
+  return id != null ? String(id) : null;
 }
 
 function buildSttForm(buffer: Buffer, filename: string, language: string): FormData {

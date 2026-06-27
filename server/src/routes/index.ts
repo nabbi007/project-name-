@@ -17,6 +17,7 @@ import listingRoutes from '../modules/listings/listings.routes';
 import cropRoutes from '../modules/crops/crops.routes';
 import marketplaceRoutes from '../modules/marketplace/marketplace.routes';
 import orderRoutes from '../modules/orders/orders.routes';
+import complaintRoutes from '../modules/complaints/complaints.routes';
 import {
   listingAudioRoutes,
   orderAudioRoutes,
@@ -42,6 +43,7 @@ router.use('/marketplace', marketplaceRoutes);
 
 // Orders & inventory (Phase 10)
 router.use('/orders', orderRoutes);
+router.use('/complaints', complaintRoutes);
 
 // Crop categories (Phase 7)
 router.use('/crop-categories', cropRoutes);

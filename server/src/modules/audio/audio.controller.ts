@@ -11,6 +11,7 @@ import {
   generateForOrder,
   getAudio,
   markPlayed,
+  markFarmerConfirmed,
 } from './audio.service';
 
 function getActor(req: Request): Actor {
@@ -48,4 +49,11 @@ export async function played(req: Request, res: Response): Promise<void> {
   const actor = getActor(req);
   const audio = await markPlayed(actor, param(req, 'audioId'));
   sendSuccess(res, { audio }, 'Audio marked as played');
+}
+
+// PATCH /api/generated-audio/:audioId/farmer-confirmed
+export async function farmerConfirmed(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const audio = await markFarmerConfirmed(actor, param(req, 'audioId'));
+  sendSuccess(res, { audio }, 'Farmer confirmation recorded');
 }

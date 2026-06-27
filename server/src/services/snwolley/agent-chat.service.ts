@@ -56,9 +56,10 @@ export async function chatWithAgent(
       );
     }
 
+    const rawChatId = response.data?.chat_id;
     return {
       content,
-      chatId: response.data?.chat_id ?? null,
+      chatId: rawChatId != null ? String(rawChatId) : null,
       raw: response.data,
     };
   } catch (error) {
