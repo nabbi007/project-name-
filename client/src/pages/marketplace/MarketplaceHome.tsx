@@ -10,12 +10,12 @@ import { CardSkeleton } from '../../components/shared/Skeleton';
 import { useAuthStore } from '../../store/authStore';
 
 const cropCategories = [
-  { name: 'Maize', emoji: '🌽', filter: 'maize', color: 'from-yellow-400 to-orange-500' },
-  { name: 'Cassava', emoji: '🥔', filter: 'cassava', color: 'from-stone-400 to-stone-600' },
-  { name: 'Tomatoes', emoji: '🍅', filter: 'tomatoes', color: 'from-red-400 to-rose-600' },
-  { name: 'Plantain', emoji: '🍌', filter: 'plantain', color: 'from-emerald-400 to-teal-500' },
-  { name: 'Yam', emoji: '🍠', filter: 'yam', color: 'from-amber-600 to-orange-800' },
-  { name: 'Rice', emoji: '🌾', filter: 'rice', color: 'from-yellow-200 to-amber-400' },
+  { name: 'Maize', emoji: '🌽', filter: 'maize' },
+  { name: 'Cassava', emoji: '🥔', filter: 'cassava' },
+  { name: 'Tomatoes', emoji: '🍅', filter: 'tomatoes' },
+  { name: 'Plantain', emoji: '🍌', filter: 'plantain' },
+  { name: 'Yam', emoji: '🍠', filter: 'yam' },
+  { name: 'Rice', emoji: '🌾', filter: 'rice' },
 ];
 
 const howItWorks = [
@@ -97,7 +97,7 @@ const MarketplaceHome: React.FC = () => {
               className="snap-start flex-shrink-0 relative group rounded-2xl p-6 w-40 overflow-hidden transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl bg-white border border-surface-100 shadow-soft animate-fade-in-up"
               style={{ animationDelay: `${0.1 * idx}s` }}
             >
-              <div className={`absolute inset-0 bg-gradient-to-br ${cat.color} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-primary-600 opacity-0 group-hover:opacity-5 transition-opacity duration-300"></div>
               <div className="flex flex-col items-center gap-3 relative z-10">
                 <span className="text-4xl group-hover:scale-125 transition-transform duration-300 drop-shadow-sm">{cat.emoji}</span>
                 <span className="font-bold text-surface-800 group-hover:text-primary-700 transition-colors">{cat.name}</span>
