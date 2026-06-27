@@ -5,14 +5,29 @@ export class AppError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
   public readonly isOperational: boolean;
+  // Optional per-field errors, rendered as a standard validation response.
+  public readonly fieldErrors?: Record<string, string[]>;
 
-  constructor(message: string, statusCode = 500, code = 'INTERNAL_ERROR') {
+  constructor(
+    message: string,
+    statusCode = 500,
+    code = 'INTERNAL_ERROR',
+    fieldErrors?: Record<string, string[]>
+  ) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
     this.isOperational = true;
+    this.fieldErrors = fieldErrors;
     Object.setPrototypeOf(this, AppError.prototype);
     Error.captureStackTrace?.(this, this.constructor);
+  }
+
+  static validation(
+    fieldErrors: Record<string, string[]>,
+    message = 'Validation failed'
+  ) {
+    return new AppError(message, 422, 'VALIDATION_ERROR', fieldErrors);
   }
 
   static badRequest(message = 'Bad request', code = 'BAD_REQUEST') {

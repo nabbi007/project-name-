@@ -33,6 +33,9 @@ export function errorHandler(
   }
 
   if (err instanceof AppError) {
+    if (err.fieldErrors) {
+      return sendValidationError(res, err.fieldErrors, err.message);
+    }
     return sendError(res, err.message, err.statusCode, err.code);
   }
 

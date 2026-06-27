@@ -1,7 +1,20 @@
 import { Request, Response } from 'express';
-import { sendCreated } from '../../utils/apiResponse';
+import { sendCreated, sendPaginated, sendSuccess } from '../../utils/apiResponse';
 import { AppError } from '../../utils/AppError';
 import { Actor, extractListing } from './listing-extraction.service';
+import {
+  createListingSchema,
+  listListingsQuerySchema,
+  updateListingSchema,
+} from './listings.validators';
+import {
+  createListing,
+  getListing,
+  listListings,
+  publishListing,
+  unpublishListing,
+  updateListing,
+} from './listings.service';
 
 function getActor(req: Request): Actor {
   if (!req.user) {
@@ -9,6 +22,8 @@ function getActor(req: Request): Actor {
   }
   return { id: req.user.id, role: req.user.role };
 }
+
+const param = (req: Request, key: string): string => String(req.params[key]);
 
 // POST /api/voice-sessions/:sessionId/extract-listing
 export async function extract(req: Request, res: Response): Promise<void> {
@@ -21,4 +36,49 @@ export async function extract(req: Request, res: Response): Promise<void> {
       ? 'Draft listing created with fields needing review'
       : 'Draft listing created from voice session'
   );
+}
+
+// POST /api/listings
+export async function create(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const input = createListingSchema.parse(req.body);
+  const listing = await createListing(actor, input);
+  sendCreated(res, { listing }, 'Draft listing created');
+}
+
+// GET /api/listings
+export async function list(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const query = listListingsQuerySchema.parse(req.query);
+  const { listings, pagination } = await listListings(actor, query);
+  sendPaginated(res, listings as unknown[], pagination);
+}
+
+// GET /api/listings/:listingId
+export async function detail(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const listing = await getListing(actor, param(req, 'listingId'));
+  sendSuccess(res, { listing }, 'Listing retrieved');
+}
+
+// PATCH /api/listings/:listingId
+export async function update(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const input = updateListingSchema.parse(req.body);
+  const listing = await updateListing(actor, param(req, 'listingId'), input);
+  sendSuccess(res, { listing }, 'Listing updated');
+}
+
+// POST /api/listings/:listingId/publish
+export async function publish(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const listing = await publishListing(actor, param(req, 'listingId'));
+  sendSuccess(res, { listing }, 'Listing published');
+}
+
+// POST /api/listings/:listingId/unpublish
+export async function unpublish(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const listing = await unpublishListing(actor, param(req, 'listingId'));
+  sendSuccess(res, { listing }, 'Listing unpublished');
 }

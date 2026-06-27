@@ -12,6 +12,8 @@ import {
   listingImageRoutes,
   imageRoutes,
 } from '../modules/listings/images.routes';
+import listingRoutes from '../modules/listings/listings.routes';
+import cropRoutes from '../modules/crops/crops.routes';
 
 const router = Router();
 
@@ -26,13 +28,17 @@ router.use('/farmers', farmerRoutes);
 router.use('/voice-sessions', voiceSessionRoutes);
 router.use('/voice-responses', voiceResponseRoutes);
 
-// Listing images (Phase 6 Vision)
+// Crop categories (Phase 7)
+router.use('/crop-categories', cropRoutes);
+
+// Listings: images (Phase 6) + management/publication (Phase 7)
 router.use('/listings', listingImageRoutes);
+router.use('/listings', listingRoutes);
 router.use('/listing-images', imageRoutes);
 
-// Placeholder mounts for upcoming phases (7-11). Teammates can replace these
+// Placeholder mounts for upcoming phases (8-11). Teammates can replace these
 // with their module routers.
-// router.use('/crop-categories', cropRoutes);
+// router.use('/marketplace', marketplaceRoutes);
 // router.use('/voice-sessions', voiceRoutes);
 // router.use('/listings', listingRoutes);
 // router.use('/marketplace', marketplaceRoutes);
