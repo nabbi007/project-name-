@@ -15,6 +15,7 @@ import {
 import listingRoutes from '../modules/listings/listings.routes';
 import cropRoutes from '../modules/crops/crops.routes';
 import marketplaceRoutes from '../modules/marketplace/marketplace.routes';
+import orderRoutes from '../modules/orders/orders.routes';
 
 const router = Router();
 
@@ -31,6 +32,9 @@ router.use('/voice-responses', voiceResponseRoutes);
 
 // Public marketplace (Phase 9)
 router.use('/marketplace', marketplaceRoutes);
+
+// Orders & inventory (Phase 10)
+router.use('/orders', orderRoutes);
 
 // Crop categories (Phase 7)
 router.use('/crop-categories', cropRoutes);

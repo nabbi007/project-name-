@@ -2,7 +2,7 @@
 
 This document is the contract between the AgroVoice **backend** (`server/`) and the **React frontend** (`client/`). It describes every endpoint currently implemented, the response envelope, authentication, roles, enums, file uploads, and the AI-failure fallbacks.
 
-> Status: Phases 1–7 + 9 implemented (auth, farmers, voice/STT, listing extraction, vision, listing management/publication, public marketplace). Phases 8, 10, 11 (TTS, orders, administration) are in progress.
+> Status: Phases 1–7, 9, 10 implemented (auth, farmers, voice/STT, listing extraction, vision, listing management/publication, public marketplace, orders/inventory). Phases 8 & 11 (TTS, administration) are in progress.
 
 ---
 
@@ -210,6 +210,25 @@ Only `PUBLISHED`, in-stock (`availableQuantity > 0`), non-expired listings are e
 - Public listing/farmer payloads expose `farmer: { uuid, fullName, displayName, region, district, community }` only — no `phone`, no agent/internal fields.
 - Images are limited to `ANALYSED`/`REVIEWED` ones, primary first.
 
+### 3.11 Orders & inventory (🔑 auth)
+
+Buyers place and cancel orders; field agents/admins fulfil them. Placing an order **reserves stock** (decrements `availableQuantity`); cancelling restores it. A listing flips to `SOLD_OUT` at zero stock and back to `PUBLISHED` when restocked (if not expired).
+
+| Method | Path | Access | Body / Query | Returns |
+| --- | --- | --- | --- | --- |
+| POST | `/orders` | BUYER | `{ listingId, quantity, deliveryMethod?, deliveryLocation?, paymentMethod?, notes? }` | `{ order }` |
+| GET | `/orders/mine` | BUYER | `?status=&page=&limit=` | paginated buyer orders |
+| GET | `/orders` | FIELD_AGENT/ADMIN | `?status=&page=&limit=` | paginated managed orders (for the agent's listings) |
+| GET | `/orders/:orderId` | any participant | — | `{ order }` (buyer=own, agent=their listings, admin=all) |
+| PATCH | `/orders/:orderId/cancel` | BUYER | — | `{ order }` (only while PENDING/CONFIRMED) |
+| PATCH | `/orders/:orderId/status` | FIELD_AGENT/ADMIN | `{ status, notes? }` | `{ order }` |
+
+- `deliveryMethod`: `PICKUP` (default) · `DELIVERY`. `paymentMethod`: `PAY_ON_PICKUP` (default) · `CASH_ON_DELIVERY` · `SIMULATED_MOMO` (sets `paymentStatus=SIMULATED_PAID`).
+- `status`: `PENDING | CONFIRMED | AWAITING_COLLECTION | READY_FOR_PICKUP | IN_TRANSIT | COLLECTED | DELIVERED | COMPLETED | CANCELLED | DISPUTED`.
+- Allowed agent transitions: PENDING→CONFIRMED/CANCELLED; CONFIRMED→AWAITING_COLLECTION/READY_FOR_PICKUP/IN_TRANSIT/CANCELLED; AWAITING_COLLECTION|READY_FOR_PICKUP→COLLECTED/CANCELLED; IN_TRANSIT→DELIVERED/CANCELLED; COLLECTED|DELIVERED→COMPLETED/DISPUTED. Invalid jumps return 400 `INVALID_STATUS_TRANSITION`.
+- An order is single-listing. `order.items[]` each carry `quantity`, `unitPrice`, `subtotal`, and the listing/farmer summary. `order.statusHistory[]` records every change. Farmer phone is not included.
+- Over-ordering returns 400 `INSUFFICIENT_STOCK`.
+
 ---
 
 ## 4. File uploads (multipart)
@@ -241,7 +260,7 @@ The current client stubs assume a different (Mongo-style) contract. Please recon
 | Listing fields `crop`, `imageUrl`, `expiryDate`, `visionObservation` | `cropCategory.name`, `images[].imagePath`, `expiresAt`, `visualObservation` (string) + `visionDescription` | Map field names |
 | Listing status `ANALYZING/NEEDS_HUMAN_REVIEW` | image `status` + `cropMatchStatus` separate enums | See §3.8 |
 | Pagination `data.{listings,page,total}` | `data: []` + `pagination: { page, limit, total, totalPages }` | Read `pagination` |
-| Orders `/orders/mine`, statuses `PLACED…`, `SIMULATED_MOMO` | Phase 10 (not built yet); backend statuses are `PENDING/CONFIRMED/…`, payment `SIMULATED_PAID/CASH_ON_DELIVERY/PAY_ON_PICKUP` | Align once Phase 10 lands |
+| Orders status `PLACED/REJECTED`, `totalPrice`, `farmerConfirmed` | Backend statuses `PENDING/CONFIRMED/…` (no PLACED/REJECTED), `totalAmount`, `statusHistory[]` (see §3.11). `paymentMethod` SIMULATED_MOMO is accepted | Map status names + `totalAmount`; treat cancel as PATCH `/orders/:id/cancel` |
 
 When Phases 9–11 are implemented this guide will be extended with the marketplace, orders, and admin contracts.
 
