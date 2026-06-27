@@ -13,6 +13,7 @@ import { EmptyState } from '../../components/shared/EmptyState';
 import { ErrorAlert } from '../../components/shared/Alerts';
 import { Drawer } from '../../components/shared/Drawer';
 import { useAuthStore } from '../../store/authStore';
+import { useCartStore } from '../../store/cartStore';
 
 const regions = [
   { value: '', label: 'All Regions' },
@@ -31,6 +32,7 @@ const regions = [
 const ProductCatalogue: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated } = useAuthStore();
+  const { items } = useCartStore();
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Read filters from URL
@@ -139,6 +141,16 @@ const ProductCatalogue: React.FC = () => {
               <span className="text-lg font-bold text-surface-900">AgroVoice</span>
             </Link>
             <div className="flex items-center gap-3">
+              <Link to="/cart" className="relative p-2 text-surface-600 hover:text-primary-600 transition-colors mr-2">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                {items.length > 0 && (
+                  <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full">
+                    {items.length}
+                  </span>
+                )}
+              </Link>
               {isAuthenticated() ? (
                 <Link to="/buyer/orders">
                   <Button variant="secondary" size="sm">My Orders</Button>

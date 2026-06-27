@@ -7,6 +7,7 @@ import { SearchInput } from '../../components/shared/SearchInput';
 import { Button } from '../../components/shared/Button';
 import { CardSkeleton } from '../../components/shared/Skeleton';
 import { useAuthStore } from '../../store/authStore';
+import { useCartStore } from '../../store/cartStore';
 
 const cropCategories = [
   { name: 'Maize', emoji: '🌽', filter: 'maize' },
@@ -41,6 +42,7 @@ const howItWorks = [
 const MarketplaceHome: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
+  const { items } = useCartStore();
 
   // Recently added listings
   const { data: recentData, isLoading: recentLoading } = useQuery({
@@ -69,6 +71,16 @@ const MarketplaceHome: React.FC = () => {
               <span className="text-lg font-bold text-surface-900">AgroVoice</span>
             </Link>
             <div className="flex items-center gap-3">
+              <Link to="/cart" className="relative p-2 text-surface-600 hover:text-primary-600 transition-colors mr-2">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                {items.length > 0 && (
+                  <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full">
+                    {items.length}
+                  </span>
+                )}
+              </Link>
               <Link to="/marketplace">
                 <Button variant="ghost" size="sm">Browse All</Button>
               </Link>
@@ -102,10 +114,10 @@ const MarketplaceHome: React.FC = () => {
             <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight text-balance">
               Fresh produce,{' '}
               <span className="text-accent-300">straight from Ghana's farms</span>
-            </h1>
+          </h1>
             <p className="mt-4 text-lg text-primary-100 max-w-lg">
               Discover AI-verified produce from local farmers. Voice-powered, transparent, and direct — no middlemen.
-            </p>
+          </p>
             <div className="mt-8 max-w-md">
               <SearchInput
                 onSearch={handleSearch}
@@ -118,17 +130,20 @@ const MarketplaceHome: React.FC = () => {
       </section>
 
       {/* ─── Crop Categories ────────────────────────────────── */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-10">
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-          {cropCategories.map((cat) => (
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 relative z-10 pb-16">
+        <div className="flex gap-4 overflow-x-auto pb-6 scrollbar-hide snap-x">
+          {cropCategories.map((cat, idx) => (
             <Link
               key={cat.filter}
               to={`/marketplace?crop=${cat.filter}`}
-              className="flex-shrink-0 flex items-center gap-2 bg-white rounded-full px-5 py-2.5 shadow-soft border border-surface-200
-                         hover:border-primary-300 hover:shadow-md transition-all duration-200 group"
+              className="snap-start flex-shrink-0 relative group rounded-2xl p-6 w-40 overflow-hidden transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl bg-white border border-surface-100 shadow-soft animate-fade-in-up"
+              style={{ animationDelay: `${0.1 * idx}s` }}
             >
-              <span className="text-xl">{cat.emoji}</span>
-              <span className="text-sm font-medium text-surface-700 group-hover:text-primary-700">{cat.name}</span>
+              <div className={`absolute inset-0 bg-gradient-to-br ${cat.color} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}></div>
+              <div className="flex flex-col items-center gap-3 relative z-10">
+                <span className="text-4xl group-hover:scale-125 transition-transform duration-300 drop-shadow-sm">{cat.emoji}</span>
+                <span className="font-bold text-surface-800 group-hover:text-primary-700 transition-colors">{cat.name}</span>
+              </div>
             </Link>
           ))}
         </div>
@@ -147,40 +162,59 @@ const MarketplaceHome: React.FC = () => {
         </div>
 
         {recentLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}
           </div>
         ) : recentListings.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {recentListings.map((listing) => (
-              <ListingCard key={listing._id} listing={listing} />
+              <div key={listing._id} className="transition-all duration-300 hover:-translate-y-1 hover:shadow-xl rounded-2xl">
+                <ListingCard listing={listing} />
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-16">
-            <span className="text-5xl mb-4 block">🌱</span>
-            <h3 className="text-lg font-semibold text-surface-700">No listings yet</h3>
-            <p className="text-surface-500 mt-1">Check back soon — farmers are adding produce daily.</p>
+          <div className="text-center py-24 bg-white rounded-3xl border border-surface-200 shadow-sm">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary-50 mb-6">
+              <span className="text-4xl">🌱</span>
+            </div>
+            <h3 className="text-xl font-bold text-surface-900">No listings yet</h3>
+            <p className="text-surface-500 mt-2 max-w-sm mx-auto">Check back soon — our farmers are busy harvesting and adding produce daily.</p>
           </div>
         )}
+
+        <div className="mt-8 text-center sm:hidden">
+          <Link to="/marketplace">
+            <Button variant="secondary" className="w-full group">
+              View All <span className="inline-block transition-transform group-hover:translate-x-1 ml-1">→</span>
+            </Button>
+          </Link>
+        </div>
       </section>
 
       {/* ─── How AgroVoice Works ────────────────────────────── */}
-      <section className="bg-white border-y border-surface-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl font-bold text-surface-900">How AgroVoice Works</h2>
-            <p className="text-surface-500 mt-2">Voice-first technology connecting farmers directly to buyers</p>
+      <section className="py-24 relative overflow-hidden">
+        <div className="absolute inset-0 bg-surface-900 -skew-y-2 origin-top-left z-0"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">The AgroVoice Process</h2>
+            <p className="text-surface-400 mt-4 text-lg max-w-2xl mx-auto">Voice-first technology connecting rural farmers directly to modern markets</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {howItWorks.map((item) => (
-              <div key={item.step} className="text-center group">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary-50 text-3xl mb-4
-                                group-hover:bg-primary-100 group-hover:scale-110 transition-all duration-300">
-                  {item.icon}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
+            {howItWorks.map((item, idxx) => (
+              <div key={item.step} className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-b from-surface-800 to-surface-900 rounded-3xl transform transition-transform group-hover:scale-105 group-hover:rotate-1 duration-300 border border-surface-700"></div>
+                <div className="relative p-8 text-center">
+                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 text-4xl mb-6 shadow-lg shadow-primary-500/30 group-hover:-translate-y-2 transition-transform duration-300">
+                    {item.icon}
+                  </div>
+                  <div className="absolute top-6 right-6 text-6xl font-black text-surface-800/50 pointer-events-none transition-colors group-hover:text-primary-900/50">
+                    {item.step}
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-3">{item.title}</h3>
+                  <p className="text-surface-400 leading-relaxed">{item.description}</p>
                 </div>
-                <h3 className="text-lg font-semibold text-surface-900">{item.title}</h3>
-                <p className="text-sm text-surface-500 mt-2 max-w-xs mx-auto">{item.description}</p>
               </div>
             ))}
           </div>
@@ -194,24 +228,30 @@ const MarketplaceHome: React.FC = () => {
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">Ready to start ordering?</h2>
             <p className="text-primary-100 max-w-lg mx-auto mb-6">
               Register for free and get access to fresh, AI-verified produce from farmers across Ghana.
-            </p>
-            <Link to="/register">
-              <Button
+              </p>
+              <Link to="/register">
+                <Button
                 variant="secondary"
-                size="lg"
+                  size="lg"
                 className="!bg-white !text-primary-700 hover:!bg-primary-50 !shadow-lg"
-              >
+                >
                 Register to Start Ordering
-              </Button>
-            </Link>
+                </Button>
+              </Link>
           </div>
         </section>
       )}
 
       {/* ─── Footer ──────────────────────────────────────────── */}
-      <footer className="bg-surface-900 text-surface-400 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-sm">
-          <p>© {new Date().getFullYear()} AgroVoice — Connecting farmers and buyers across Ghana</p>
+      <footer className="bg-white border-t border-surface-200 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+              <span className="text-white text-xs font-bold">A</span>
+            </div>
+            <span className="text-lg font-bold text-surface-900">AgroVoice</span>
+          </div>
+          <p className="text-surface-500 text-sm font-medium">© {new Date().getFullYear()} AgroVoice. Building the future of agriculture.</p>
         </div>
       </footer>
     </div>
@@ -219,3 +259,4 @@ const MarketplaceHome: React.FC = () => {
 };
 
 export default MarketplaceHome;
+
