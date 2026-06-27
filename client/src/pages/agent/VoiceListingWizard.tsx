@@ -6,11 +6,13 @@ import {
   getPublicationBlockers,
   isPublishBlockedError,
   listingsApi,
+  filterVoiceGapFields,
   type GeneratedAudio,
   type Listing,
 } from '../../api/listings.api';
 import { voiceApi, type VoiceStep } from '../../api/voice.api';
 import { GeneratedAudioPlayer } from '../../components/audio/GeneratedAudioPlayer';
+import { MissingFieldsVoicePrompt } from '../../components/audio/MissingFieldsVoicePrompt';
 import { AudioRecorder } from '../../components/audio/AudioRecorder';
 import {
   TranscriptEditor,
@@ -38,19 +40,12 @@ const PHASES = [
   { id: 5, label: 'Publish' },
 ] as const;
 
-const VOICE_STEPS: { step: VoiceStep; label: string; question: string; optional?: boolean }[] = [
-  { step: 'CROP', label: 'Crop', question: 'What crop do you have?' },
-  { step: 'QUANTITY', label: 'Quantity', question: 'How much do you have?' },
-  { step: 'UNIT', label: 'Unit', question: 'What unit is it measured in?' },
-  { step: 'AVAILABILITY', label: 'Availability', question: 'When will it be available?' },
-  { step: 'PRICE', label: 'Price', question: 'What price per unit?' },
-  {
-    step: 'DESCRIPTION',
-    label: 'Extra info',
-    question: 'Any additional information?',
-    optional: true,
-  },
-];
+/** Single recording — crop, quantity, price, availability, and how long the listing stays active. */
+const COMBINED_VOICE = {
+  step: 'DESCRIPTION' as VoiceStep,
+  question:
+    'Tell us everything in one answer: what crop you have, how much, the unit, price per unit, when it will be ready, and how long it stays for sale — say an expiry date or a duration like two weeks.',
+};
 
 const EXTRACTION_MESSAGES = [
   'Reviewing farmer responses…',
@@ -83,14 +78,7 @@ const FIX_PHASE_MAP: Record<string, number> = {
   agentConfirmed: 4,
 };
 
-interface AcceptedTranscript {
-  step: VoiceStep;
-  label: string;
-  transcript: string;
-}
-
 type PublishState = 'idle' | 'publishing' | 'success' | 'blocked' | 'failed';
-type VoiceMode = 'record' | 'review';
 
 const VoiceListingWizard: React.FC = () => {
   const { farmerId } = useParams<{ farmerId: string }>();
@@ -101,13 +89,10 @@ const VoiceListingWizard: React.FC = () => {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionStarting, setSessionStarting] = useState(false);
 
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>('record');
-  const [voiceStepIndex, setVoiceStepIndex] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [transcriptStatus, setTranscriptStatus] = useState<TranscriptStatus>('idle');
   const [transcriptError, setTranscriptError] = useState<string | undefined>();
   const [retryPending, setRetryPending] = useState(false);
-  const [acceptedTranscripts, setAcceptedTranscripts] = useState<AcceptedTranscript[]>([]);
   const [showRecorder, setShowRecorder] = useState(true);
   const [lastResponseId, setLastResponseId] = useState<string | null>(null);
 
@@ -115,6 +100,8 @@ const VoiceListingWizard: React.FC = () => {
   const [extractionMessageIndex, setExtractionMessageIndex] = useState(0);
   const [listing, setListing] = useState<Listing | null>(null);
   const [extractionFailed, setExtractionFailed] = useState(false);
+  const [extractionPartial, setExtractionPartial] = useState(false);
+  const [voiceGapFields, setVoiceGapFields] = useState<string[]>([]);
   const [savingListing, setSavingListing] = useState(false);
   const [listingSaved, setListingSaved] = useState(false);
 
@@ -178,93 +165,41 @@ const VoiceListingWizard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [farmer, farmerId]);
 
-  const currentVoiceStep = VOICE_STEPS[voiceStepIndex];
-  const requiredVoiceCount = VOICE_STEPS.filter((s) => !s.optional).length;
-  const acceptedRequiredCount = acceptedTranscripts.filter(
-    (t) => !VOICE_STEPS.find((s) => s.step === t.step)?.optional
-  ).length;
-
-  const runExtraction = async () => {
-    if (!sessionId) return;
-    setExtracting(true);
-    try {
-      await voiceApi.completeVoiceSession(sessionId);
-    } catch {
-      // no-op
-    }
-    try {
-      const extracted = await listingsApi.extractListing(sessionId);
-      setListing({
-        ...extracted,
-        farmerName: farmer?.fullName,
-        community: extracted.community ?? farmer?.community,
-      });
-      setExtractionFailed(false);
-    } catch {
-      setListing({
-        _id: '',
-        farmer: farmerId ?? '',
-        farmerName: farmer?.fullName,
-        community: farmer?.community,
-      });
-      setExtractionFailed(true);
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  useEffect(() => {
-    if (phase !== 3 || extractionStarted.current || !sessionId) return;
-    extractionStarted.current = true;
-    void runExtraction();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, sessionId]);
-
-  useEffect(() => {
-    if (!extracting) return;
-    const interval = setInterval(() => {
-      setExtractionMessageIndex((i) => (i + 1) % EXTRACTION_MESSAGES.length);
-    }, 1500);
-    return () => clearInterval(interval);
-  }, [extracting]);
-
   const persistAcceptedAnswer = async (text: string, responseId: string) => {
-    if (!sessionId || !currentVoiceStep) return;
+    if (!sessionId) return;
     try {
       await voiceApi.editVoiceResponse(
         sessionId,
-        currentVoiceStep.step,
+        COMBINED_VOICE.step,
         text,
         responseId
       );
     } catch {
       // continue locally
     }
-    setAcceptedTranscripts((prev) => {
-      const filtered = prev.filter((t) => t.step !== currentVoiceStep.step);
-      return [
-        ...filtered,
-        { step: currentVoiceStep.step, label: currentVoiceStep.label, transcript: text },
-      ];
-    });
+  };
+
+  const finishVoiceAndContinue = async (text: string, responseId: string) => {
+    await persistAcceptedAnswer(text, responseId);
+    extractionStarted.current = false;
+    setPhase(3);
   };
 
   const handleRecordingComplete = async (blob: Blob) => {
-    if (!sessionId || !farmer || !currentVoiceStep) return;
+    if (!sessionId || !farmer) return;
     setShowRecorder(false);
     setTranscriptStatus('uploading');
     try {
       setTranscriptStatus('transcribing');
       const result = await voiceApi.uploadVoiceResponse(sessionId, {
         audioBlob: blob,
-        step: currentVoiceStep.step,
+        step: COMBINED_VOICE.step,
         language: farmer.preferredLanguage ?? 'en',
       });
       setLastResponseId(result.responseId);
 
       if (!result.transcriptionFailed && result.transcript.trim()) {
-        await persistAcceptedAnswer(result.transcript, result.responseId);
-        advanceVoiceQuestion();
+        await finishVoiceAndContinue(result.transcript, result.responseId);
         return;
       }
 
@@ -289,8 +224,7 @@ const VoiceListingWizard: React.FC = () => {
       setTranscriptError(result.errorMessage);
 
       if (!result.transcriptionFailed && result.transcript.trim()) {
-        await persistAcceptedAnswer(result.transcript, lastResponseId);
-        advanceVoiceQuestion();
+        await finishVoiceAndContinue(result.transcript, lastResponseId);
         return;
       }
 
@@ -304,35 +238,70 @@ const VoiceListingWizard: React.FC = () => {
 
   const handleAcceptTranscript = async (editedTranscript: string) => {
     if (!lastResponseId) return;
-    await persistAcceptedAnswer(editedTranscript, lastResponseId);
-    advanceVoiceQuestion();
+    await finishVoiceAndContinue(editedTranscript, lastResponseId);
   };
 
-  const advanceVoiceQuestion = () => {
+  const resetVoiceRecording = () => {
     setShowRecorder(true);
     setTranscript('');
     setTranscriptStatus('idle');
     setTranscriptError(undefined);
     setLastResponseId(null);
-    if (voiceStepIndex < VOICE_STEPS.length - 1) {
-      setVoiceStepIndex((i) => i + 1);
-    } else {
-      setVoiceMode('review');
+  };
+
+  const runExtraction = async () => {
+    if (!sessionId) return;
+    setExtracting(true);
+    try {
+      await voiceApi.completeVoiceSession(sessionId);
+    } catch {
+      // no-op
+    }
+    try {
+      const { listing: extracted, incompleteFields } =
+        await listingsApi.extractListing(sessionId);
+      setListing({
+        ...extracted,
+        farmerName: farmer?.fullName,
+        community: extracted.community ?? farmer?.community,
+      });
+      setExtractionFailed(false);
+      const gaps = filterVoiceGapFields(incompleteFields);
+      setVoiceGapFields(gaps);
+      setExtractionPartial(gaps.length > 0);
+    } catch {
+      setListing({
+        _id: '',
+        farmer: farmerId ?? '',
+        farmerName: farmer?.fullName,
+        community: farmer?.community,
+      });
+      setExtractionFailed(true);
+      setExtractionPartial(false);
+    } finally {
+      setExtracting(false);
     }
   };
 
-  const skipOptionalQuestion = () => {
-    setVoiceMode('review');
-  };
+  useEffect(() => {
+    if (phase !== 3 || extractionStarted.current || !sessionId) return;
+    extractionStarted.current = true;
+    void runExtraction();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, sessionId]);
 
-  const goToVoiceQuestion = (index: number) => {
-    setVoiceStepIndex(index);
-    setVoiceMode('record');
-    setShowRecorder(true);
-    setTranscript('');
-    setTranscriptStatus('idle');
-    setTranscriptError(undefined);
-    setLastResponseId(null);
+  useEffect(() => {
+    if (!extracting) return;
+    const interval = setInterval(() => {
+      setExtractionMessageIndex((i) => (i + 1) % EXTRACTION_MESSAGES.length);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [extracting]);
+
+  const handleVoiceGapUpdated = (updated: Listing, remaining: string[]) => {
+    setListing({ ...updated, farmerName: farmer?.fullName });
+    setVoiceGapFields(remaining);
+    setExtractionPartial(remaining.length > 0);
   };
 
   const handleSaveListing = async (payload: Parameters<typeof listingsApi.updateListing>[1]) => {
@@ -438,14 +407,10 @@ const VoiceListingWizard: React.FC = () => {
     }
   };
 
-  const isCurrentStepAccepted = acceptedTranscripts.some((t) => t.step === currentVoiceStep?.step);
-  const canStartVoice = acceptedRequiredCount >= requiredVoiceCount;
-
   const startVoicePhase = async () => {
     const id = await ensureVoiceSession();
     if (id) {
-      setVoiceMode('record');
-      setVoiceStepIndex(0);
+      resetVoiceRecording();
       setPhase(2);
     }
   };
@@ -515,7 +480,7 @@ const VoiceListingWizard: React.FC = () => {
         <div className="card p-6 space-y-4">
           <h1 className="text-xl font-bold">Who is this listing for?</h1>
           <p className="text-surface-600 text-sm">
-            Record the farmer's answers in {langLabel}. Each answer is saved automatically.
+            One recording in {langLabel} — crop, amount, price, when it is ready, and how long it stays for sale.
           </p>
           <div className="bg-surface-50 rounded-lg p-4">
             <p className="text-lg font-semibold">{farmer.fullName}</p>
@@ -549,37 +514,19 @@ const VoiceListingWizard: React.FC = () => {
         </div>
       )}
 
-      {/* Phase 2 — Voice (all questions + review) */}
-      {phase === 2 && voiceMode === 'record' && currentVoiceStep && (
+      {/* Phase 2 — Single voice recording */}
+      {phase === 2 && (
         <div className="space-y-4">
           <div>
-            <h1 className="text-xl font-bold">Record answers</h1>
+            <h1 className="text-xl font-bold">Record listing details</h1>
             <p className="text-surface-600 text-sm mt-1">
-              Question {voiceStepIndex + 1} of {VOICE_STEPS.length} · {currentVoiceStep.label}
+              One recording — sent as a single answer to the server.
             </p>
-          </div>
-
-          <div className="flex gap-1">
-            {VOICE_STEPS.map((s, i) => {
-              const done = acceptedTranscripts.some((t) => t.step === s.step);
-              const current = i === voiceStepIndex;
-              return (
-                <button
-                  key={s.step}
-                  type="button"
-                  title={s.label}
-                  onClick={() => done && goToVoiceQuestion(i)}
-                  className={`h-2 flex-1 rounded-full transition-colors ${
-                    current ? 'bg-primary-600' : done ? 'bg-primary-300' : 'bg-surface-200'
-                  }`}
-                />
-              );
-            })}
           </div>
 
           {showRecorder && (
             <AudioRecorder
-              label={currentVoiceStep.question}
+              label={COMBINED_VOICE.question}
               onRecordingComplete={handleRecordingComplete}
             />
           )}
@@ -591,64 +538,9 @@ const VoiceListingWizard: React.FC = () => {
               onAccept={handleAcceptTranscript}
               onRetryTranscription={lastResponseId ? handleRetryTranscription : undefined}
               retryPending={retryPending}
-              onRecordAgain={() => {
-                setShowRecorder(true);
-                setTranscript('');
-                setTranscriptStatus('idle');
-                setTranscriptError(undefined);
-              }}
+              onRecordAgain={resetVoiceRecording}
             />
           )}
-          {currentVoiceStep.optional && !isCurrentStepAccepted && !showRecorder && (
-            <Button size="lg" variant="secondary" className="w-full" onClick={skipOptionalQuestion}>
-              Skip optional question
-            </Button>
-          )}
-          {isCurrentStepAccepted && showRecorder && (
-            <Button size="lg" className="w-full" onClick={advanceVoiceQuestion}>
-              {voiceStepIndex < VOICE_STEPS.length - 1 ? 'Next question' : 'Review answers'}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {phase === 2 && voiceMode === 'review' && (
-        <div className="card p-6 space-y-4">
-          <h1 className="text-xl font-bold">Review answers</h1>
-          <p className="text-surface-600 text-sm">
-            {acceptedTranscripts.length} answer{acceptedTranscripts.length !== 1 ? 's' : ''} recorded.
-            Tap a row to re-record.
-          </p>
-          <ul className="space-y-2">
-            {acceptedTranscripts.map((item) => (
-              <li key={item.step} className="border border-surface-200 rounded-lg p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-medium text-surface-900 text-sm">{item.label}</p>
-                    <p className="text-surface-700 mt-0.5 text-sm">{item.transcript}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      const idx = VOICE_STEPS.findIndex((s) => s.step === item.step);
-                      if (idx >= 0) goToVoiceQuestion(idx);
-                    }}
-                  >
-                    Re-record
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Button
-            size="lg"
-            className="w-full"
-            disabled={!canStartVoice}
-            onClick={() => setPhase(3)}
-          >
-            Build listing from answers
-          </Button>
         </div>
       )}
 
@@ -665,8 +557,22 @@ const VoiceListingWizard: React.FC = () => {
             <>
               {extractionFailed && (
                 <ErrorAlert>
-                  AI could not auto-fill everything — complete the form below manually.
+                  Could not build a draft listing — complete the form below and save.
                 </ErrorAlert>
+              )}
+              {extractionPartial && !extractionFailed && (
+                <ErrorAlert>
+                  Some fields could not be read from the recording — listen to the prompt and record again, or fill in below.
+                </ErrorAlert>
+              )}
+              {voiceGapFields.length > 0 && listing?._id && (
+                <MissingFieldsVoicePrompt
+                  listingId={listing._id}
+                  fields={voiceGapFields}
+                  farmerName={farmer.fullName}
+                  language={farmer.preferredLanguage ?? 'en'}
+                  onUpdated={handleVoiceGapUpdated}
+                />
               )}
               <div className="card p-6">
                 <ListingForm

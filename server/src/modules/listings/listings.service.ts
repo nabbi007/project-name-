@@ -135,6 +135,7 @@ export async function createListing(actor: Actor, input: CreateListingInput) {
       unit: input.unit,
       pricePerUnit: input.pricePerUnit ?? 0,
       availableDate: input.availableDate,
+      expiresAt: input.expiresAt,
       region: input.region,
       community: input.community,
       status: ListingStatus.DRAFT,
@@ -215,6 +216,7 @@ export async function updateListing(
     region: input.region,
     community: input.community,
     availableDate: input.availableDate,
+    expiresAt: input.expiresAt,
   };
   if (input.quantity !== undefined) {
     data.quantity = input.quantity;

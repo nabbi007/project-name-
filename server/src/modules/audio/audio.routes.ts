@@ -4,7 +4,9 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { authorize } from '../../middleware/role.middleware';
 import { requireActiveAccount } from '../../middleware/accountStatus.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { audioUpload } from '../../middleware/upload.middleware';
 import { generateListing, generateOrder, detail, played, farmerConfirmed } from './audio.controller';
+import { supplementVoice } from '../listings/listings.controller';
 
 const guard = [
   authenticate,
@@ -15,6 +17,12 @@ const guard = [
 // Mounted at /api/listings : POST /api/listings/:listingId/audio
 export const listingAudioRoutes = Router();
 listingAudioRoutes.post('/:listingId/audio', ...guard, asyncHandler(generateListing));
+listingAudioRoutes.post(
+  '/:listingId/supplement-voice',
+  ...guard,
+  audioUpload.single('audio'),
+  asyncHandler(supplementVoice)
+);
 
 // Mounted at /api/orders : POST /api/orders/:orderId/audio
 export const orderAudioRoutes = Router();

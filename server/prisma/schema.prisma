@@ -87,6 +87,7 @@ enum ImageStatus {
 
 enum AudioMessageType {
   LISTING_PUBLISHED
+  LISTING_FIELD_PROMPT
   NEW_ORDER
   ORDER_CANCELLED
 }
