@@ -10,12 +10,12 @@ import { useAuthStore } from '../../store/authStore';
 import { useCartStore } from '../../store/cartStore';
 
 const cropCategories = [
-  { name: 'Maize', emoji: '🌽', filter: 'maize' },
-  { name: 'Cassava', emoji: '🥔', filter: 'cassava' },
-  { name: 'Tomatoes', emoji: '🍅', filter: 'tomatoes' },
-  { name: 'Plantain', emoji: '🍌', filter: 'plantain' },
-  { name: 'Yam', emoji: '🍠', filter: 'yam' },
-  { name: 'Rice', emoji: '🌾', filter: 'rice' },
+  { name: 'Maize', emoji: '🌽', filter: 'maize', color: 'from-yellow-400 to-orange-500' },
+  { name: 'Cassava', emoji: '🥔', filter: 'cassava', color: 'from-stone-400 to-stone-600' },
+  { name: 'Tomatoes', emoji: '🍅', filter: 'tomatoes', color: 'from-red-400 to-rose-600' },
+  { name: 'Plantain', emoji: '🍌', filter: 'plantain', color: 'from-emerald-400 to-teal-500' },
+  { name: 'Yam', emoji: '🍠', filter: 'yam', color: 'from-amber-600 to-orange-800' },
+  { name: 'Rice', emoji: '🌾', filter: 'rice', color: 'from-yellow-200 to-amber-400' },
 ];
 
 const howItWorks = [
@@ -202,7 +202,7 @@ const MarketplaceHome: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
-            {howItWorks.map((item, idxx) => (
+            {howItWorks.map((item) => (
               <div key={item.step} className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-b from-surface-800 to-surface-900 rounded-3xl transform transition-transform group-hover:scale-105 group-hover:rotate-1 duration-300 border border-surface-700"></div>
                 <div className="relative p-8 text-center">
