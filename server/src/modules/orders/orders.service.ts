@@ -325,3 +325,48 @@ export async function updateStatus(
     });
   }, TX_OPTIONS);
 }
+
+// Field agent records that the farmer acknowledged the order (PENDING → CONFIRMED).
+export async function confirmFarmerOrder(actor: Actor, uuid: string) {
+  if (actor.role === UserRole.BUYER) {
+    throw AppError.forbidden('Only field agents can confirm on behalf of farmers');
+  }
+
+  const where: Prisma.OrderWhereInput = { uuid };
+  if (actor.role === UserRole.FIELD_AGENT) {
+    where.items = { some: { produceListing: { fieldAgentId: actor.id } } };
+  }
+
+  const order = await prisma.order.findFirst({
+    where,
+    select: { id: true, status: true },
+  });
+  if (!order) throw AppError.notFound('Order not found');
+
+  if (order.status === OrderStatus.CONFIRMED) {
+    return getOrder(actor, uuid);
+  }
+  if (order.status !== OrderStatus.PENDING) {
+    throw AppError.badRequest(
+      `Order with status ${order.status} cannot be farmer-confirmed`,
+      'ORDER_NOT_CONFIRMABLE'
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        previousStatus: order.status,
+        newStatus: OrderStatus.CONFIRMED,
+        changedById: actor.id,
+        notes: 'Farmer confirmed via field agent',
+      },
+    });
+    return tx.order.update({
+      where: { id: order.id },
+      data: { status: OrderStatus.CONFIRMED },
+      select: orderSelect,
+    });
+  }, TX_OPTIONS);
+}

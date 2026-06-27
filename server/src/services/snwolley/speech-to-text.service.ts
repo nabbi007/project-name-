@@ -54,7 +54,8 @@ function extractTranscript(data: any): string {
 }
 
 function extractSessionId(data: any): string | null {
-  return data?.session_id ?? data?.sessionId ?? null;
+  const id = data?.session_id ?? data?.sessionId ?? null;
+  return id != null ? String(id) : null;
 }
 
 // Reads a local file and transcribes it (kept for tests / local fallback).

@@ -17,6 +17,7 @@ const audioSelect = {
   audioPath: true,
   processingStatus: true,
   playedAt: true,
+  farmerConfirmedAt: true,
   createdAt: true,
 } satisfies Prisma.GeneratedAudioSelect;
 
@@ -227,4 +228,86 @@ export async function markPlayed(actor: Actor, uuid: string) {
     data: { playedAt: new Date() },
     select: audioSelect,
   });
+}
+
+export async function markFarmerConfirmed(actor: Actor, uuid: string) {
+  await getAudio(actor, uuid);
+  return prisma.generatedAudio.update({
+    where: { uuid },
+    data: { farmerConfirmedAt: new Date() },
+    select: audioSelect,
+  });
+}
+
+// Re-synthesises TTS for an existing generated-audio record (admin retry / regenerate).
+export async function retryTts(actor: Actor, uuid: string) {
+  const where: Prisma.GeneratedAudioWhereInput = { uuid };
+  if (actor.role === UserRole.FIELD_AGENT) {
+    where.OR = [
+      { produceListing: { fieldAgentId: actor.id } },
+      { farmer: { fieldAgentId: actor.id } },
+    ];
+  }
+
+  const audio = await prisma.generatedAudio.findFirst({
+    where,
+    select: { id: true, uuid: true, textContent: true, messageType: true },
+  });
+  if (!audio) throw AppError.notFound('Generated audio not found');
+
+  const run = await prisma.aiProcessingRun.create({
+    data: {
+      processableType: 'GeneratedAudio',
+      processableId: audio.id,
+      apiType: 'TEXT_TO_SPEECH',
+      requestSummary: `${audio.messageType} (retry)`,
+      processingStatus: 'PROCESSING',
+      attempts: 1,
+      startedAt: new Date(),
+    },
+    select: { id: true },
+  });
+
+  await prisma.generatedAudio.update({
+    where: { id: audio.id },
+    data: { processingStatus: 'PROCESSING' },
+  });
+
+  try {
+    const buffer = await synthesizeSpeech(audio.textContent);
+    const stored = await uploadMedia(buffer, 'generated-audio', '.wav');
+
+    const updated = await prisma.generatedAudio.update({
+      where: { id: audio.id },
+      data: { audioPath: stored.url, processingStatus: 'COMPLETED' },
+      select: audioSelect,
+    });
+
+    await prisma.aiProcessingRun.update({
+      where: { id: run.id },
+      data: { processingStatus: 'COMPLETED', httpStatus: 200, completedAt: new Date() },
+    });
+
+    return updated;
+  } catch (error) {
+    const appErr =
+      error instanceof AppError
+        ? error
+        : new AppError('Audio generation failed', 502, 'TTS_UNAVAILABLE');
+
+    await prisma.generatedAudio.update({
+      where: { id: audio.id },
+      data: { processingStatus: 'FAILED' },
+    });
+    await prisma.aiProcessingRun.update({
+      where: { id: run.id },
+      data: {
+        processingStatus: 'FAILED',
+        httpStatus: appErr.statusCode,
+        errorMessage: appErr.message,
+        completedAt: new Date(),
+      },
+    });
+    throw appErr;
+  }
 }

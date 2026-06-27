@@ -14,6 +14,7 @@ import {
   listManagedOrders,
   listMyOrders,
   updateStatus,
+  confirmFarmerOrder,
 } from './orders.service';
 
 function getActor(req: Request): Actor {
@@ -67,4 +68,11 @@ export async function changeStatus(req: Request, res: Response): Promise<void> {
   const input = updateStatusSchema.parse(req.body);
   const order = await updateStatus(actor, param(req, 'orderId'), input);
   sendSuccess(res, { order }, 'Order status updated');
+}
+
+// POST /api/orders/:orderId/farmer-confirmation  (FIELD_AGENT/ADMIN)
+export async function farmerConfirmation(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const order = await confirmFarmerOrder(actor, param(req, 'orderId'));
+  sendSuccess(res, { order }, 'Farmer confirmation recorded');
 }

@@ -16,6 +16,7 @@ import {
   retryTranscription,
   transcribeResponse,
   updateTranscript,
+  completeSession,
 } from './voice.service';
 
 function getActor(req: Request): Actor {
@@ -88,4 +89,11 @@ export async function correctTranscript(req: Request, res: Response): Promise<vo
   const input = updateTranscriptSchema.parse(req.body);
   const updated = await updateTranscript(actor, param(req, 'responseId'), input);
   sendSuccess(res, { response: updated }, 'Transcript updated');
+}
+
+// POST /api/voice-sessions/:sessionId/complete
+export async function complete(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const session = await completeSession(actor, param(req, 'sessionId'));
+  sendSuccess(res, { session }, 'Voice session completed');
 }

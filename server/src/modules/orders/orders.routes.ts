@@ -11,6 +11,7 @@ import {
   detail,
   cancel,
   changeStatus,
+  farmerConfirmation,
 } from './orders.controller';
 
 const router = Router();
@@ -28,6 +29,11 @@ router.patch(
   '/:orderId/status',
   authorize(UserRole.FIELD_AGENT, UserRole.ADMIN),
   asyncHandler(changeStatus)
+);
+router.post(
+  '/:orderId/farmer-confirmation',
+  authorize(UserRole.FIELD_AGENT, UserRole.ADMIN),
+  asyncHandler(farmerConfirmation)
 );
 
 // Any authenticated participant (access enforced in the service)

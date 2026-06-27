@@ -4,7 +4,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { authorize } from '../../middleware/role.middleware';
 import { requireActiveAccount } from '../../middleware/accountStatus.middleware';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { generateListing, generateOrder, detail, played } from './audio.controller';
+import { generateListing, generateOrder, detail, played, farmerConfirmed } from './audio.controller';
 
 const guard = [
   authenticate,
@@ -24,3 +24,4 @@ orderAudioRoutes.post('/:orderId/audio', ...guard, asyncHandler(generateOrder));
 export const generatedAudioRoutes = Router();
 generatedAudioRoutes.get('/:audioId', ...guard, asyncHandler(detail));
 generatedAudioRoutes.patch('/:audioId/played', ...guard, asyncHandler(played));
+generatedAudioRoutes.patch('/:audioId/farmer-confirmed', ...guard, asyncHandler(farmerConfirmed));

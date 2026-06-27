@@ -275,3 +275,26 @@ export async function updateTranscript(
     select: responseSelect,
   });
 }
+
+export async function completeSession(actor: Actor, sessionUuid: string) {
+  const session = await prisma.voiceSession.findFirst({
+    where: { uuid: sessionUuid, ...agentScope(actor) },
+    select: { id: true, status: true },
+  });
+  if (!session) {
+    throw AppError.notFound('Voice session not found');
+  }
+  if (session.status === VoiceSessionStatus.COMPLETED) {
+    return getSession(actor, sessionUuid);
+  }
+
+  await prisma.voiceSession.update({
+    where: { id: session.id },
+    data: {
+      status: VoiceSessionStatus.COMPLETED,
+      completedAt: new Date(),
+    },
+  });
+
+  return getSession(actor, sessionUuid);
+}
