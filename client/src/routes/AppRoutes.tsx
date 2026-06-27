@@ -20,9 +20,11 @@ const ProductDetails = lazy(() => import('../pages/marketplace/ProductDetails'))
 const PublicFarmerProfile = lazy(() => import('../pages/marketplace/PublicFarmerProfile'));
 
 // ─── Buyer Pages (DEV 3 owns) ───────────────────────────────
-// const Cart = lazy(() => import('../pages/buyer/Cart'));
-// const Checkout = lazy(() => import('../pages/buyer/Checkout'));
-// const BuyerOrders = lazy(() => import('../pages/buyer/BuyerOrders'));
+const Cart = lazy(() => import('../pages/buyer/Cart'));
+const Checkout = lazy(() => import('../pages/buyer/Checkout'));
+const BuyerOrders = lazy(() => import('../pages/buyer/BuyerOrders'));
+const BuyerOrderDetails = lazy(() => import('../pages/buyer/BuyerOrderDetails'));
+const BuyerProfile = lazy(() => import('../pages/buyer/BuyerProfile'));
 
 // ─── Agent Pages (DEV 2 owns) ───────────────────────────────
 // const AgentDashboard = lazy(() => import('../pages/agent/AgentDashboard'));
@@ -63,8 +65,8 @@ const AppRoutes: React.FC = () => (
 
       {/* Cart & Checkout — public browsing, auth required at checkout
        *  Owner: DEV 3 */}
-      {/* <Route path="/cart" element={<Cart />} /> */}
-      {/* <Route path="/checkout" element={<ProtectedRoute requiredRole="BUYER"><Checkout /></ProtectedRoute>} /> */}
+      <Route path="/cart" element={<Cart />} />
+      <Route path="/checkout" element={<ProtectedRoute requiredRole="BUYER"><Checkout /></ProtectedRoute>} />
 
       {/* ══════════════════════════════════════════════════════════
        *  AGENT ROUTES — FIELD_AGENT role required
@@ -113,7 +115,6 @@ const AppRoutes: React.FC = () => (
       {/* ══════════════════════════════════════════════════════════
        *  BUYER ROUTES — BUYER role required
        *  Owner: DEV 3
-       *  Uncomment as pages are built
        * ══════════════════════════════════════════════════════════ */}
       <Route
         path="/buyer/*"
@@ -123,8 +124,9 @@ const AppRoutes: React.FC = () => (
           </ProtectedRoute>
         }
       >
-        {/* DEV 3: Add buyer sub-routes here */}
-        {/* <Route path="orders" element={<BuyerOrders />} /> */}
+        <Route path="orders" element={<BuyerOrders />} />
+        <Route path="orders/:orderId" element={<BuyerOrderDetails />} />
+        <Route path="profile" element={<BuyerProfile />} />
       </Route>
     </Routes>
   </Suspense>
