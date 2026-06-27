@@ -21,6 +21,17 @@ const STT_ENDPOINT = '/stt';
 const AUDIO_FIELD = 'audio';
 const DEFAULT_LANGUAGE = 'en';
 
+/** Map farmer locale codes to STT language tags. */
+export function normalizeSttLanguage(language?: string): string {
+  if (!language) return DEFAULT_LANGUAGE;
+  const code = language.trim().toLowerCase();
+  if (code === 'en' || code === 'english') return 'en';
+  if (code === 'twi' || code === 'tw') return 'tw';
+  if (code === 'ga') return 'ga';
+  if (code === 'ewe' || code === 'ee') return 'ee';
+  return code.length <= 5 ? code : DEFAULT_LANGUAGE;
+}
+
 export interface SttResult {
   transcript: string;
   sttSessionId: string | null;
@@ -57,42 +68,16 @@ function extractSessionId(data: any): string | null {
   return data?.session_id ?? data?.sessionId ?? null;
 }
 
-// Reads a local file and transcribes it (kept for tests / local fallback).
-export async function transcribeAudio(
-  absoluteFilePath: string,
-  language?: string
-): Promise<SttResult> {
-  if (!fs.existsSync(absoluteFilePath)) {
-    throw new AppError('Audio file not found', 404, 'AUDIO_NOT_FOUND');
-  }
-  const buffer = await fs.promises.readFile(absoluteFilePath);
-  return transcribeAudioBuffer(buffer, path.basename(absoluteFilePath), language);
+function buildSttForm(buffer: Buffer, filename: string, language: string): FormData {
+  const ext = path.extname(filename) || '.wav';
+  const blob = new Blob([new Uint8Array(buffer)], { type: mimeForExtension(ext) });
+  const form = new FormData();
+  form.append(AUDIO_FIELD, blob, path.basename(filename) || `audio${ext}`);
+  form.append('language', language);
+  return form;
 }
 
-// Transcribes an in-memory audio buffer (used with Cloudinary-backed storage).
-export async function transcribeAudioBuffer(
-  buffer: Buffer,
-  filename: string,
-  language?: string
-): Promise<SttResult> {
-  if (!env.SNWOLLEY_HACKATHON_API_KEY) {
-    throw new AppError(
-      'Speech-to-text is not configured. Enter the transcript manually.',
-      503,
-      'STT_NOT_CONFIGURED'
-    );
-  }
-
-  if (buffer.byteLength === 0) {
-    throw new AppError('Audio recording is empty', 422, 'EMPTY_AUDIO');
-  }
-
-  const ext = path.extname(filename) || '.wav';
-  const form = new FormData();
-  const blob = new Blob([new Uint8Array(buffer)], { type: mimeForExtension(ext) });
-  form.append(AUDIO_FIELD, blob, path.basename(filename) || `audio${ext}`);
-  form.append('language', language || DEFAULT_LANGUAGE);
-
+async function callStt(form: FormData): Promise<SttResult> {
   try {
     const response = await hackathonClient.post(STT_ENDPOINT, form, {
       headers: {
@@ -119,6 +104,45 @@ export async function transcribeAudioBuffer(
       throw error;
     }
     throw mapAxiosError(error);
+  }
+}
+
+// Reads a local file and transcribes it (kept for tests / local fallback).
+export async function transcribeAudio(
+  absoluteFilePath: string,
+  language?: string
+): Promise<SttResult> {
+  if (!fs.existsSync(absoluteFilePath)) {
+    throw new AppError('Audio file not found', 404, 'AUDIO_NOT_FOUND');
+  }
+  const buffer = await fs.promises.readFile(absoluteFilePath);
+  return transcribeAudioBuffer(buffer, path.basename(absoluteFilePath), language);
+}
+
+// Transcribes an in-memory audio buffer (used on upload and for retries).
+export async function transcribeAudioBuffer(
+  buffer: Buffer,
+  filename: string,
+  language?: string
+): Promise<SttResult> {
+  if (!env.SNWOLLEY_HACKATHON_API_KEY) {
+    throw new AppError(
+      'Speech-to-text is not configured. Enter the transcript manually.',
+      503,
+      'STT_NOT_CONFIGURED'
+    );
+  }
+
+  if (buffer.byteLength === 0) {
+    throw new AppError('Audio recording is empty', 422, 'EMPTY_AUDIO');
+  }
+
+  const primaryLang = normalizeSttLanguage(language);
+
+  try {
+    return await callStt(buildSttForm(buffer, filename, primaryLang));
+  } catch (error) {
+    throw error instanceof AppError ? error : mapAxiosError(error);
   }
 }
 

@@ -3,11 +3,10 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 const navItems = [
-  { to: '/agent/dashboard', label: 'Dashboard' },
-  { to: '/agent/farmers', label: 'Farmers' },
-  { to: '/agent/farmers', label: 'New Listing' },
-  { to: '/agent/listings', label: 'Listings' },
-  { to: '/agent/orders', label: 'Orders' },
+  { id: 'dashboard', to: '/agent/dashboard', label: 'Dashboard' },
+  { id: 'farmers', to: '/agent/farmers', label: 'Farmers' },
+  { id: 'listings', to: '/agent/listings', label: 'Listings' },
+  { id: 'orders', to: '/agent/orders', label: 'Orders' },
 ];
 
 const AgentLayout: React.FC = () => {
@@ -53,7 +52,7 @@ const AgentLayout: React.FC = () => {
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
-              key={item.to}
+              key={item.id}
               to={item.to}
               end={item.to === '/agent/dashboard'}
               className={navLinkClass}

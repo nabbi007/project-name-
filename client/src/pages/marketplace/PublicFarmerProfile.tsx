@@ -5,41 +5,37 @@ import { marketplaceApi } from '../../api/marketplace.api';
 import { ListingCard } from '../../components/marketplace/ListingCard';
 import { Button } from '../../components/shared/Button';
 import { Spinner } from '../../components/shared/Spinner';
-import { CardSkeleton } from '../../components/shared/Skeleton';
 import { EmptyState } from '../../components/shared/EmptyState';
-import apiClient from '../../api/api-client';
 
 const PublicFarmerProfile: React.FC = () => {
   const { farmerId } = useParams<{ farmerId: string }>();
 
-  // Fetch farmer basic info
-  const { data: farmerData, isLoading: farmerLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['public-farmer', farmerId],
-    queryFn: async () => {
-      const { data } = await apiClient.get(`/farmers/${farmerId}`);
-      return data;
-    },
+    queryFn: () => marketplaceApi.getFarmerProfile(farmerId!),
     enabled: !!farmerId,
   });
 
-  // Fetch farmer's published listings
-  const { data: listingsData, isLoading: listingsLoading } = useQuery({
-    queryKey: ['farmer-listings', farmerId],
-    queryFn: () => marketplaceApi.listPublishedListings({}),
-    enabled: !!farmerId,
-  });
+  const farmer = data?.data?.farmer;
+  const farmerListings = data?.data?.listings ?? [];
 
-  const farmer = farmerData?.data?.farmer;
-  // Filter listings to this farmer only
-  const farmerListings = (listingsData?.data?.listings || []).filter((l) => {
-    const fId = typeof l.farmer === 'object' ? l.farmer._id : l.farmer;
-    return fId === farmerId;
-  });
-
-  if (farmerLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (isError || !farmer) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <EmptyState
+          title="Farmer not found"
+          message="This farmer profile is not available."
+          actionLabel="Browse Marketplace"
+          onAction={() => { window.location.href = '/marketplace'; }}
+        />
       </div>
     );
   }
@@ -109,11 +105,7 @@ const PublicFarmerProfile: React.FC = () => {
             Available Produce ({farmerListings.length})
           </h2>
 
-          {listingsLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}
-            </div>
-          ) : farmerListings.length > 0 ? (
+          {farmerListings.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {farmerListings.map((listing) => (
                 <ListingCard key={listing._id} listing={listing} />

@@ -9,6 +9,7 @@ import {
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { transcribeAudioBuffer } from '../../services/snwolley/speech-to-text.service';
+import { translateToEnglish, isEnglishLanguage } from '../../services/snwolley/translate.service';
 import { fetchMedia } from '../../services/storage/storage.service';
 import {
   CreateResponseInput,
@@ -156,8 +157,17 @@ async function resolveOwnedResponse(actor: Actor, responseUuid: string) {
 }
 
 // Orchestrates a transcription attempt with full AiProcessingRun logging.
-async function runTranscription(responseId: number, audioRef: string, language: string | null) {
-  const filename = path.basename(audioRef);
+type AudioSource =
+  | { kind: 'buffer'; buffer: Buffer; filename: string }
+  | { kind: 'ref'; ref: string };
+
+async function runTranscription(
+  responseId: number,
+  source: AudioSource,
+  language: string | null
+) {
+  const filename =
+    source.kind === 'buffer' ? source.filename : path.basename(source.ref);
 
   const run = await prisma.aiProcessingRun.create({
     data: {
@@ -181,13 +191,25 @@ async function runTranscription(responseId: number, audioRef: string, language: 
   });
 
   try {
-    const buffer = await fetchMedia(audioRef);
+    const buffer =
+      source.kind === 'buffer' ? source.buffer : await fetchMedia(source.ref);
     const result = await transcribeAudioBuffer(buffer, filename, language ?? undefined);
+
+    let transcript = result.transcript;
+    let correctedTranscript: string | null = null;
+
+    if (!isEnglishLanguage(language)) {
+      const { english, translated } = await translateToEnglish(transcript, language);
+      if (translated && english) {
+        correctedTranscript = english;
+      }
+    }
 
     const updated = await prisma.voiceResponse.update({
       where: { id: responseId },
       data: {
-        transcript: result.transcript,
+        transcript,
+        correctedTranscript,
         sttSessionId: result.sttSessionId,
         processingStatus: ProcessingStatus.COMPLETED,
         errorMessage: null,
@@ -200,7 +222,7 @@ async function runTranscription(responseId: number, audioRef: string, language: 
       data: {
         processingStatus: ProcessingStatus.COMPLETED,
         sessionId: result.sttSessionId,
-        responseContent: result.transcript.slice(0, 2000),
+        responseContent: (correctedTranscript ?? transcript).slice(0, 2000),
         httpStatus: 200,
         completedAt: new Date(),
       },
@@ -235,6 +257,27 @@ async function runTranscription(responseId: number, audioRef: string, language: 
   }
 }
 
+export async function autoTranscribeResponse(
+  actor: Actor,
+  responseUuid: string,
+  buffer: Buffer,
+  filename: string
+) {
+  const response = await resolveOwnedResponse(actor, responseUuid);
+  try {
+    return await runTranscription(
+      response.id,
+      { kind: 'buffer', buffer, filename },
+      response.language
+    );
+  } catch {
+    return prisma.voiceResponse.findFirstOrThrow({
+      where: { uuid: responseUuid },
+      select: responseSelect,
+    });
+  }
+}
+
 export async function transcribeResponse(actor: Actor, responseUuid: string) {
   const response = await resolveOwnedResponse(actor, responseUuid);
   if (!response.audioPath) {
@@ -243,7 +286,11 @@ export async function transcribeResponse(actor: Actor, responseUuid: string) {
       'NO_AUDIO'
     );
   }
-  return runTranscription(response.id, response.audioPath, response.language);
+  return runTranscription(
+    response.id,
+    { kind: 'ref', ref: response.audioPath },
+    response.language
+  );
 }
 
 export async function retryTranscription(actor: Actor, responseUuid: string) {
@@ -272,6 +319,14 @@ export async function updateTranscript(
   return prisma.voiceResponse.update({
     where: { id: response.id },
     data,
+    select: responseSelect,
+  });
+}
+
+export async function attachAudioPath(responseUuid: string, audioPath: string) {
+  return prisma.voiceResponse.update({
+    where: { uuid: responseUuid },
+    data: { audioPath },
     select: responseSelect,
   });
 }

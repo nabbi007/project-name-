@@ -12,7 +12,8 @@ import { ErrorAlert } from '../../components/shared/Alerts';
 const registerSchema = z
   .object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
-    phone: z.string().min(10, 'Enter a valid phone number').max(15, 'Phone number too long'),
+    email: z.string().email('Enter a valid email address'),
+    phone: z.string().min(10, 'Enter a valid phone number').max(15, 'Phone number too long').optional().or(z.literal('')),
     password: z.string().min(6, 'Password must be at least 6 characters'),
     confirmPassword: z.string(),
   })
@@ -43,15 +44,16 @@ const Register: React.FC = () => {
     try {
       const response = await authApi.registerBuyer({
         name: formData.name,
-        phone: formData.phone,
+        email: formData.email,
+        phone: formData.phone || undefined,
         password: formData.password,
       });
       login(response.data.token, response.data.user);
       navigate('/marketplace', { replace: true });
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { error?: string } } };
-      if (axiosError.response?.data?.error) {
-        setError(axiosError.response.data.error);
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      if (axiosError.response?.data?.message) {
+        setError(axiosError.response.data.message);
       } else {
         setError('Registration failed. Please try again.');
       }
@@ -88,7 +90,15 @@ const Register: React.FC = () => {
             />
 
             <Input
-              label="Phone Number"
+              label="Email"
+              type="email"
+              placeholder="e.g. buyer@example.com"
+              error={errors.email?.message}
+              {...formRegister('email')}
+            />
+
+            <Input
+              label="Phone Number (optional)"
               type="tel"
               placeholder="e.g. 0240000000"
               error={errors.phone?.message}

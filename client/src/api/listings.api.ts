@@ -1,4 +1,5 @@
 import apiClient from './api-client';
+import { resolveMediaUrl } from './media';
 
 export type VisionStatus =
   | 'ANALYZING'
@@ -12,6 +13,16 @@ export interface VisionObservation {
   status?: VisionStatus;
   flaggedIssues?: string[];
   reviewedByAgent?: boolean;
+  identifiedCrop?: string;
+  cropMatchStatus?: string;
+}
+
+export interface ListingImage {
+  _id: string;
+  imageUrl?: string;
+  status?: string;
+  cropMatchStatus?: string;
+  isPrimary?: boolean;
 }
 
 export interface Listing {
@@ -21,6 +32,7 @@ export interface Listing {
   agent?: string;
   voiceSession?: string;
   crop?: string;
+  cropCategoryId?: string;
   quantity?: number;
   unit?: string;
   pricePerUnit?: number;
@@ -31,7 +43,10 @@ export interface Listing {
   district?: string;
   community?: string;
   imageUrl?: string;
+  primaryImageId?: string;
+  images?: ListingImage[];
   visionObservation?: VisionObservation;
+  agentConfirmed?: boolean;
   status?: string;
   rejectionReason?: string;
   publishedAt?: string;
@@ -48,28 +63,34 @@ export interface ListingFormPayload {
   region?: string;
   district?: string;
   community?: string;
-}
-
-export interface PublishBlockedError {
-  success: false;
-  error: 'Cannot publish';
-  data: { missingFields: string[] };
+  agentConfirmed?: boolean;
 }
 
 export interface GeneratedAudio {
   _id: string;
   audioUrl: string;
   textContent?: string;
+  processingStatus?: string;
+}
+
+interface RawImage {
+  uuid: string;
+  imagePath?: string;
+  status?: string;
+  cropMatchStatus?: string;
+  isPrimary?: boolean;
+  visionResponse?: string | null;
 }
 
 interface RawListing {
   uuid?: string;
   _id?: string;
-  farmer?: string | { uuid: string; fullName?: string; community?: string };
+  farmer?: string | { uuid: string; fullName?: string; community?: string; region?: string };
   fieldAgent?: string | { uuid: string };
   voiceSession?: string | { uuid: string };
   title?: string;
   crop?: string;
+  cropCategory?: { uuid?: string; name?: string };
   quantity?: number | string;
   unit?: string;
   pricePerUnit?: number | string;
@@ -81,29 +102,92 @@ interface RawListing {
   district?: string;
   community?: string;
   imageUrl?: string;
+  images?: RawImage[];
   visionObservation?: VisionObservation;
   visualObservation?: string;
   visionDescription?: string;
+  agentConfirmed?: boolean;
   status?: string;
   rejectionReason?: string;
   publishedAt?: string;
 }
 
-function parseVisionObservation(raw: RawListing): VisionObservation | undefined {
-  if (raw.visionObservation) return raw.visionObservation;
-  if (raw.visionDescription || raw.visualObservation) {
-    return {
-      description: raw.visionDescription ?? raw.visualObservation,
-      status: 'COMPLETED',
-      flaggedIssues: [],
-      reviewedByAgent: false,
-    };
+interface VisionObservationPayload {
+  identifiedCrop?: string;
+  colour?: string;
+  maturity?: string;
+  visibleCondition?: string;
+  visibleIssues?: string[];
+  recommendation?: string;
+  warning?: string;
+}
+
+function imageStatusToVision(status?: string, cropMatch?: string): VisionStatus {
+  if (status === 'PENDING') return 'PENDING';
+  if (status === 'ANALYSED') {
+    if (cropMatch === 'MANUAL_REVIEW_REQUIRED' || cropMatch === 'MISMATCH' || cropMatch === 'UNCLEAR') {
+      return 'NEEDS_HUMAN_REVIEW';
+    }
+    return 'COMPLETED';
   }
-  return undefined;
+  if (status === 'REVIEWED') return 'COMPLETED';
+  if (status === 'REJECTED') return 'FAILED';
+  return 'PENDING';
+}
+
+function formatObservation(obs?: VisionObservationPayload, fallback?: string): string | undefined {
+  if (fallback) return fallback;
+  if (!obs) return undefined;
+  const parts: string[] = [];
+  if (obs.identifiedCrop) parts.push(`Crop: ${obs.identifiedCrop}`);
+  if (obs.colour) parts.push(`Colour: ${obs.colour}`);
+  if (obs.maturity) parts.push(`Maturity: ${obs.maturity}`);
+  if (obs.visibleCondition) parts.push(`Condition: ${obs.visibleCondition}`);
+  if (obs.visibleIssues?.length) parts.push(`Issues: ${obs.visibleIssues.join(', ')}`);
+  if (obs.recommendation) parts.push(obs.recommendation);
+  if (obs.warning) parts.push(`Note: ${obs.warning}`);
+  return parts.length ? parts.join('. ') : undefined;
+}
+
+function parseVisionFromImage(image?: RawImage, listing?: RawListing): VisionObservation | undefined {
+  if (!image && !listing?.visionDescription && !listing?.visualObservation) return undefined;
+
+  let parsed: VisionObservationPayload | undefined;
+  if (image?.visionResponse) {
+    try {
+      parsed = JSON.parse(image.visionResponse) as VisionObservationPayload;
+    } catch {
+      parsed = { recommendation: image.visionResponse };
+    }
+  }
+
+  const description =
+    formatObservation(parsed, listing?.visionDescription ?? listing?.visualObservation) ??
+    parsed?.recommendation;
+
+  return {
+    description,
+    status: imageStatusToVision(image?.status, image?.cropMatchStatus),
+    flaggedIssues: parsed?.visibleIssues ?? [],
+    reviewedByAgent: image?.status === 'REVIEWED',
+    identifiedCrop: parsed?.identifiedCrop,
+    cropMatchStatus: image?.cropMatchStatus,
+  };
 }
 
 function mapListing(raw: RawListing): Listing {
   const farmerObj = typeof raw.farmer === 'object' ? raw.farmer : undefined;
+  const images: ListingImage[] = (raw.images ?? []).map((img) => ({
+    _id: img.uuid,
+    imageUrl: resolveMediaUrl(img.imagePath) ?? undefined,
+    status: img.status,
+    cropMatchStatus: img.cropMatchStatus,
+    isPrimary: img.isPrimary,
+  }));
+
+  const primary = images.find((i) => i.isPrimary) ?? images[0];
+  const primaryRaw = raw.images?.find((i) => i.uuid === primary?._id) ?? raw.images?.[0];
+
   return {
     _id: raw.uuid ?? raw._id ?? '',
     farmer: farmerObj?.uuid ?? (typeof raw.farmer === 'string' ? raw.farmer : ''),
@@ -111,52 +195,87 @@ function mapListing(raw: RawListing): Listing {
     agent: typeof raw.fieldAgent === 'object' ? raw.fieldAgent.uuid : raw.fieldAgent,
     voiceSession:
       typeof raw.voiceSession === 'object' ? raw.voiceSession.uuid : raw.voiceSession,
-    crop: raw.crop ?? raw.title,
+    crop: raw.cropCategory?.name ?? raw.crop ?? raw.title,
+    cropCategoryId: raw.cropCategory?.uuid,
     quantity: raw.quantity != null ? Number(raw.quantity) : undefined,
     unit: raw.unit,
     pricePerUnit: raw.pricePerUnit != null ? Number(raw.pricePerUnit) : undefined,
     availableDate: raw.availableDate,
     expiryDate: raw.expiryDate ?? raw.expiresAt,
     description: raw.description,
-    region: raw.region,
+    region: raw.region ?? farmerObj?.region,
     district: raw.district,
     community: raw.community ?? farmerObj?.community,
-    imageUrl: raw.imageUrl,
-    visionObservation: parseVisionObservation(raw),
+    imageUrl: primary?.imageUrl ?? resolveMediaUrl(raw.imageUrl) ?? undefined,
+    primaryImageId: primary?._id,
+    images,
+    visionObservation: parseVisionFromImage(primaryRaw, raw),
+    agentConfirmed: raw.agentConfirmed,
     status: raw.status,
     rejectionReason: raw.rejectionReason,
     publishedAt: raw.publishedAt,
   };
 }
 
-function mapAudio(raw: { uuid?: string; _id?: string; audioPath?: string; audioUrl?: string }): GeneratedAudio {
-  const base = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
-  const url = raw.audioUrl ?? (raw.audioPath ? `${base}${raw.audioPath}` : '');
-  return { _id: raw.uuid ?? raw._id ?? '', audioUrl: url };
+function toUpdateBody(payload: ListingFormPayload): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...payload };
+  if (payload.crop !== undefined) {
+    body.title = payload.crop;
+    delete body.crop;
+  }
+  if (payload.expiryDate !== undefined) {
+    body.expiresAt = payload.expiryDate;
+    delete body.expiryDate;
+  }
+  return body;
+}
+
+function mapAudio(raw: {
+  uuid?: string;
+  _id?: string;
+  audioPath?: string;
+  audioUrl?: string;
+  textContent?: string;
+  processingStatus?: string;
+}): GeneratedAudio {
+  return {
+    _id: raw.uuid ?? raw._id ?? '',
+    audioUrl: resolveMediaUrl(raw.audioUrl ?? raw.audioPath) ?? '',
+    textContent: raw.textContent,
+    processingStatus: raw.processingStatus,
+  };
+}
+
+async function fetchListingById(id: string): Promise<Listing> {
+  const { data } = await apiClient.get<{ success: boolean; data: { listing: RawListing } }>(
+    `/listings/${id}`
+  );
+  return mapListing(data.data.listing);
+}
+
+async function resolvePrimaryImageId(listingId: string): Promise<string | undefined> {
+  const listing = await fetchListingById(listingId);
+  return listing.primaryImageId;
 }
 
 export const listingsApi = {
   extractListing: async (voiceSessionId: string): Promise<Listing> => {
-    const { data } = await apiClient.post<{ success: boolean; data: { listing: RawListing } }>(
-      `/voice-sessions/${voiceSessionId}/extract-listing`
-    );
+    const { data } = await apiClient.post<{
+      success: boolean;
+      data: { listing: RawListing; incompleteFields?: string[] };
+    }>(`/voice-sessions/${voiceSessionId}/extract-listing`);
     return mapListing(data.data.listing);
   },
 
   updateListing: async (id: string, payload: ListingFormPayload): Promise<Listing> => {
     const { data } = await apiClient.patch<{ success: boolean; data: { listing: RawListing } }>(
       `/listings/${id}`,
-      payload
+      toUpdateBody(payload)
     );
     return mapListing(data.data.listing);
   },
 
-  getListing: async (id: string): Promise<Listing> => {
-    const { data } = await apiClient.get<{ success: boolean; data: { listing: RawListing } }>(
-      `/listings/${id}`
-    );
-    return mapListing(data.data.listing);
-  },
+  getListing: fetchListingById,
 
   uploadListingImage: async (
     id: string,
@@ -165,30 +284,41 @@ export const listingsApi = {
   ): Promise<Listing> => {
     const formData = new FormData();
     formData.append('image', imageFile);
-    const { data } = await apiClient.post<{ success: boolean; data: { listing: RawListing } }>(
-      `/listings/${id}/image`,
-      formData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (event) => {
-          if (onProgress && event.total) {
-            onProgress(Math.round((event.loaded * 100) / event.total));
-          }
-        },
-      }
-    );
-    return mapListing(data.data.listing);
+    formData.append('isPrimary', 'true');
+
+    const { data: uploadData } = await apiClient.post<{
+      success: boolean;
+      data: { image: RawImage };
+    }>(`/listings/${id}/images`, formData, {
+      onUploadProgress: (event) => {
+        if (onProgress && event.total) {
+          onProgress(Math.round((event.loaded * 100) / event.total));
+        }
+      },
+    });
+
+    const imageId = uploadData.data.image.uuid;
+    await apiClient.post(`/listing-images/${imageId}/analyse`);
+    return fetchListingById(id);
   },
 
   submitVisionReview: async (
     id: string,
     payload: { approved: boolean; explanation?: string }
   ): Promise<Listing> => {
-    const { data } = await apiClient.patch<{ success: boolean; data: { listing: RawListing } }>(
-      `/listings/${id}/vision-review`,
-      payload
-    );
-    return mapListing(data.data.listing);
+    const imageId = await resolvePrimaryImageId(id);
+    if (!imageId) throw new Error('No listing image to review');
+
+    await apiClient.patch(`/listing-images/${imageId}/review`, {
+      decision: payload.approved ? 'APPROVE' : 'REJECT',
+      notes: payload.explanation,
+    });
+
+    if (payload.approved) {
+      await apiClient.patch(`/listings/${id}`, { agentConfirmed: true });
+    }
+
+    return fetchListingById(id);
   },
 
   publishListing: async (id: string): Promise<Listing> => {
@@ -207,38 +337,39 @@ export const listingsApi = {
 
   rejectListing: async (id: string, reason: string): Promise<Listing> => {
     const { data } = await apiClient.patch<{ success: boolean; data: { listing: RawListing } }>(
-      `/admin/listings/${id}/status`,
-      { status: 'REJECTED', rejectionReason: reason }
+      `/admin/listings/${id}/moderate`,
+      { decision: 'REJECT', reason }
     );
     return mapListing(data.data.listing);
   },
 
-  generateConfirmationAudio: async (
-    id: string,
-    messageType: 'PUBLISHED'
-  ): Promise<GeneratedAudio> => {
+  generateConfirmationAudio: async (id: string, _messageType: 'PUBLISHED'): Promise<GeneratedAudio> => {
     const { data } = await apiClient.post<{
       success: boolean;
-      data: { audio: { uuid?: string; audioPath?: string; audioUrl?: string } };
-    }>(`/listings/${id}/generate-confirmation`, { messageType });
+      data: {
+        audio: {
+          uuid?: string;
+          audioPath?: string;
+          textContent?: string;
+          processingStatus?: string;
+        };
+      };
+    }>(`/listings/${id}/audio`, {});
     return mapAudio(data.data.audio);
   },
 
-  ackConfirmationAudio: async (
-    audioId: string,
-    payload: { farmerHeard: boolean; farmerConfirmed: boolean }
-  ): Promise<void> => {
-    await apiClient.patch(`/generated-audio/${audioId}/farmer-confirmed`, payload);
+  ackConfirmationAudio: async (audioId: string, _payload?: { farmerHeard?: boolean; farmerConfirmed?: boolean }): Promise<void> => {
+    await apiClient.patch(`/generated-audio/${audioId}/played`);
   },
 
-  listListings: async (params?: { status?: string; page?: number }): Promise<{
+  listListings: async (params?: { status?: string; page?: number; limit?: number }): Promise<{
     listings: Listing[];
-    pagination: { page: number; totalPages: number; total: number };
+    pagination: { page: number; totalPages: number; total: number; limit?: number };
   }> => {
     const { data } = await apiClient.get<{
       success: boolean;
       data: RawListing[];
-      pagination: { page: number; totalPages: number; total: number };
+      pagination: { page: number; totalPages: number; total: number; limit?: number };
     }>('/listings', { params });
     return {
       listings: data.data.map(mapListing),
@@ -247,18 +378,20 @@ export const listingsApi = {
   },
 };
 
-export function isPublishBlockedError(err: unknown): err is { response: { data: PublishBlockedError } } {
-  const axiosErr = err as { response?: { status?: number; data?: PublishBlockedError } };
+export function isPublishBlockedError(err: unknown): boolean {
+  const axiosErr = err as { response?: { status?: number; data?: { errors?: { publication?: string[] } } } };
   return (
-    axiosErr.response?.status === 400 &&
-    axiosErr.response?.data?.error === 'Cannot publish' &&
-    Array.isArray(axiosErr.response?.data?.data?.missingFields)
+    axiosErr.response?.status === 422 &&
+    Array.isArray(axiosErr.response?.data?.errors?.publication)
   );
 }
 
+export function getPublicationBlockers(err: unknown): string[] {
+  if (!isPublishBlockedError(err)) return [];
+  const axiosErr = err as { response: { data: { errors: { publication: string[] } } } };
+  return axiosErr.response.data.errors.publication;
+}
+
 export function getListingImageUrl(imageUrl?: string): string | null {
-  if (!imageUrl) return null;
-  if (imageUrl.startsWith('http')) return imageUrl;
-  const base = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
-  return `${base}${imageUrl}`;
+  return resolveMediaUrl(imageUrl);
 }

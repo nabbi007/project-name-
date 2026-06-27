@@ -11,6 +11,8 @@ import {
 import {
   Actor,
   addResponse,
+  attachAudioPath,
+  autoTranscribeResponse,
   createSession,
   getSession,
   retryTranscription,
@@ -55,7 +57,7 @@ export async function response(req: Request, res: Response): Promise<void> {
   }
 
   let audioRef: string | null = null;
-  if (req.file) {
+  if (req.file && input.transcript) {
     const stored = await uploadMedia(
       req.file.buffer,
       'audio',
@@ -65,6 +67,32 @@ export async function response(req: Request, res: Response): Promise<void> {
   }
 
   const created = await addResponse(actor, param(req, 'sessionId'), input, audioRef);
+
+  // Auto-transcribe from the upload buffer (parallel with Cloudinary storage).
+  if (req.file && !input.transcript) {
+    const ext = audioExtension(req.file.mimetype);
+    const filename = req.file.originalname?.endsWith(ext)
+      ? req.file.originalname
+      : `recording${ext}`;
+
+    const transcribePromise = autoTranscribeResponse(
+      actor,
+      created.uuid,
+      req.file.buffer,
+      filename
+    );
+    const stored = await uploadMedia(req.file.buffer, 'audio', ext);
+    const transcribed = await transcribePromise;
+    const withAudio = await attachAudioPath(created.uuid, stored.url);
+
+    sendCreated(
+      res,
+      { response: { ...transcribed, audioPath: withAudio.audioPath } },
+      'Voice response saved'
+    );
+    return;
+  }
+
   sendCreated(res, { response: created }, 'Voice response saved');
 }
 

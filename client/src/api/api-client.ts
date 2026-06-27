@@ -8,19 +8,20 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor — attach Bearer token
 apiClient.interceptors.request.use(
   (config) => {
     const token = useAuthStore.getState().token;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Response interceptor — handle 401 globally
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {

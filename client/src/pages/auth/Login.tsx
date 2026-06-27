@@ -10,7 +10,7 @@ import { Button } from '../../components/shared/Button';
 import { ErrorAlert } from '../../components/shared/Alerts';
 
 const loginSchema = z.object({
-  phone: z.string().min(1, 'Phone number is required'),
+  email: z.string().email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -52,11 +52,13 @@ const Login: React.FC = () => {
           navigate('/', { replace: true });
       }
     } catch (err: unknown) {
-      const axiosError = err as { response?: { status?: number; data?: { error?: string } } };
+      const axiosError = err as {
+        response?: { status?: number; data?: { message?: string; code?: string } };
+      };
       if (axiosError.response?.status === 403) {
         setError('Your account has been suspended. Please contact support.');
-      } else if (axiosError.response?.data?.error) {
-        setError(axiosError.response.data.error);
+      } else if (axiosError.response?.data?.message) {
+        setError(axiosError.response.data.message);
       } else {
         setError('Invalid credentials. Please try again.');
       }
@@ -86,11 +88,11 @@ const Login: React.FC = () => {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <Input
-              label="Phone Number"
-              type="tel"
-              placeholder="e.g. 0200000001"
-              error={errors.phone?.message}
-              {...register('phone')}
+              label="Email"
+              type="email"
+              placeholder="e.g. agent@agrovoice.test"
+              error={errors.email?.message}
+              {...register('email')}
             />
 
             <Input
