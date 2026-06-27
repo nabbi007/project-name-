@@ -13,6 +13,7 @@ import {
   retry,
   correctTranscript,
 } from './voice.controller';
+import { extract as extractListing } from '../listings/listings.controller';
 
 const guard = [
   authenticate,
@@ -36,6 +37,12 @@ voiceSessionRoutes.post(
   ...guard,
   audioUpload.single('audio'),
   asyncHandler(response)
+);
+// Phase 5: turn a session's transcripts into a draft listing via the Agents API.
+voiceSessionRoutes.post(
+  '/:sessionId/extract-listing',
+  ...guard,
+  asyncHandler(extractListing)
 );
 
 // Mounted at /api/voice-responses
