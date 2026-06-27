@@ -28,7 +28,17 @@ const AUDIO_MIME_EXTENSIONS: Record<string, string> = {
   'audio/3gpp': '.3gp',
 };
 
+const IMAGE_MIME_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+};
+
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 function makeStorage(subdir: string, extMap: Record<string, string>) {
   return multer.diskStorage({
@@ -68,3 +78,12 @@ export const audioUpload = multer({
 
 export const audioRelativePath = (filename: string): string =>
   path.posix.join('uploads', 'audio', filename);
+
+export const imageUpload = multer({
+  storage: makeStorage('images', IMAGE_MIME_EXTENSIONS),
+  limits: { fileSize: MAX_IMAGE_BYTES },
+  fileFilter: mimeFilter(IMAGE_MIME_EXTENSIONS),
+});
+
+export const imageRelativePath = (filename: string): string =>
+  path.posix.join('uploads', 'images', filename);

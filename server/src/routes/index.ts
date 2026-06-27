@@ -8,6 +8,10 @@ import {
   voiceSessionRoutes,
   voiceResponseRoutes,
 } from '../modules/voice/voice.routes';
+import {
+  listingImageRoutes,
+  imageRoutes,
+} from '../modules/listings/images.routes';
 
 const router = Router();
 
@@ -22,7 +26,11 @@ router.use('/farmers', farmerRoutes);
 router.use('/voice-sessions', voiceSessionRoutes);
 router.use('/voice-responses', voiceResponseRoutes);
 
-// Placeholder mounts for upcoming phases (5-11). Teammates can replace these
+// Listing images (Phase 6 Vision)
+router.use('/listings', listingImageRoutes);
+router.use('/listing-images', imageRoutes);
+
+// Placeholder mounts for upcoming phases (7-11). Teammates can replace these
 // with their module routers.
 // router.use('/crop-categories', cropRoutes);
 // router.use('/voice-sessions', voiceRoutes);
