@@ -1,0 +1,431 @@
+// AgroVoice database schema.
+// Phase 1/2 implement User auth; the remaining models are defined up front so
+// teammates can build phases 3-11 against a stable schema.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  FIELD_AGENT
+  BUYER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum FarmerStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum CategoryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum VoiceSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum QuestionType {
+  CROP
+  QUANTITY
+  UNIT
+  AVAILABILITY_DATE
+  PRICE
+  ADDITIONAL_INFORMATION
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ListingStatus {
+  DRAFT
+  PROCESSING
+  PENDING_REVIEW
+  PUBLISHED
+  RESERVED
+  SOLD_OUT
+  EXPIRED
+  REJECTED
+}
+
+enum CropMatchStatus {
+  MATCH
+  MISMATCH
+  UNCLEAR
+  MANUAL_REVIEW_REQUIRED
+}
+
+enum ImageStatus {
+  PENDING
+  ANALYSED
+  REVIEWED
+  REJECTED
+}
+
+enum AudioMessageType {
+  LISTING_PUBLISHED
+  NEW_ORDER
+  ORDER_CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  AWAITING_COLLECTION
+  COLLECTED
+  IN_TRANSIT
+  READY_FOR_PICKUP
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentStatus {
+  PENDING
+  SIMULATED_PAID
+  CASH_ON_DELIVERY
+  PAY_ON_PICKUP
+  FAILED
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum AiApiType {
+  SPEECH_TO_TEXT
+  AGENT_CHAT
+  VISION
+  TEXT_TO_SPEECH
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           Int        @id @default(autoincrement())
+  uuid         String     @unique @default(uuid())
+  name         String
+  email        String     @unique
+  phone        String?
+  passwordHash String
+  role         UserRole   @default(BUYER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Field agent relations
+  farmers              Farmer[]         @relation("AgentFarmers")
+  voiceSessions        VoiceSession[]   @relation("AgentVoiceSessions")
+  listings             ProduceListing[] @relation("AgentListings")
+  reviewedImages       ListingImage[]   @relation("ImageReviewer")
+
+  // Buyer relations
+  orders     Order[]     @relation("BuyerOrders")
+  complaints Complaint[] @relation("BuyerComplaints")
+
+  // Admin / actor relations
+  orderStatusChanges  OrderStatusHistory[] @relation("StatusChangedBy")
+  resolvedComplaints  Complaint[]          @relation("ComplaintResolver")
+
+  @@index([role])
+  @@index([status])
+}
+
+model Farmer {
+  id                 Int          @id @default(autoincrement())
+  uuid               String       @unique @default(uuid())
+  fieldAgentId       Int
+  fullName           String
+  displayName        String?
+  phone              String?
+  gender             String?
+  preferredLanguage  String?
+  region             String?
+  district           String?
+  community          String?
+  consentConfirmedAt DateTime?
+  status             FarmerStatus @default(ACTIVE)
+  notes              String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  fieldAgent     User             @relation("AgentFarmers", fields: [fieldAgentId], references: [id])
+  voiceSessions  VoiceSession[]
+  listings       ProduceListing[]
+  generatedAudio GeneratedAudio[]
+
+  @@index([fieldAgentId])
+  @@index([status])
+}
+
+model CropCategory {
+  id          Int            @id @default(autoincrement())
+  uuid        String         @unique @default(uuid())
+  name        String         @unique
+  slug        String         @unique
+  description String?
+  defaultUnit String?
+  status      CategoryStatus @default(ACTIVE)
+
+  listings ProduceListing[]
+}
+
+model VoiceSession {
+  id               Int                @id @default(autoincrement())
+  uuid             String             @unique @default(uuid())
+  farmerId         Int
+  fieldAgentId     Int
+  sessionReference String             @unique
+  status           VoiceSessionStatus @default(IN_PROGRESS)
+  startedAt        DateTime           @default(now())
+  completedAt      DateTime?
+
+  farmer     Farmer          @relation(fields: [farmerId], references: [id])
+  fieldAgent User            @relation("AgentVoiceSessions", fields: [fieldAgentId], references: [id])
+  responses  VoiceResponse[]
+  listings   ProduceListing[]
+
+  @@index([farmerId])
+  @@index([fieldAgentId])
+}
+
+model VoiceResponse {
+  id                  Int              @id @default(autoincrement())
+  uuid                String           @unique @default(uuid())
+  voiceSessionId      Int
+  questionType        QuestionType
+  audioPath           String?
+  language            String?
+  sttSessionId        String?
+  transcript          String?
+  correctedTranscript String?
+  processingStatus    ProcessingStatus @default(PENDING)
+  errorMessage        String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  voiceSession VoiceSession @relation(fields: [voiceSessionId], references: [id])
+
+  @@index([voiceSessionId])
+}
+
+model ProduceListing {
+  id                Int           @id @default(autoincrement())
+  uuid              String        @unique @default(uuid())
+  farmerId          Int
+  fieldAgentId      Int
+  cropCategoryId    Int?
+  voiceSessionId    Int?
+  title             String
+  slug              String        @unique
+  description       String?
+  quantity          Decimal       @default(0)
+  availableQuantity Decimal       @default(0)
+  unit              String?
+  pricePerUnit      Decimal       @default(0)
+  availableDate     DateTime?
+  expiresAt         DateTime?
+  region            String?
+  community         String?
+  visionDescription String?
+  visualObservation String?
+  agentConfirmed    Boolean       @default(false)
+  status            ListingStatus @default(DRAFT)
+  publishedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  farmer       Farmer        @relation(fields: [farmerId], references: [id])
+  fieldAgent   User          @relation("AgentListings", fields: [fieldAgentId], references: [id])
+  cropCategory CropCategory? @relation(fields: [cropCategoryId], references: [id])
+  voiceSession VoiceSession? @relation(fields: [voiceSessionId], references: [id])
+
+  images         ListingImage[]
+  orderItems     OrderItem[]
+  generatedAudio GeneratedAudio[]
+
+  @@index([farmerId])
+  @@index([fieldAgentId])
+  @@index([status])
+  @@index([cropCategoryId])
+}
+
+model ListingImage {
+  id               Int             @id @default(autoincrement())
+  uuid             String          @unique @default(uuid())
+  produceListingId Int
+  imagePath        String
+  visionPrompt     String?
+  visionResponse   String?
+  cropMatchStatus  CropMatchStatus @default(MANUAL_REVIEW_REQUIRED)
+  reviewedBy       Int?
+  reviewedAt       DateTime?
+  isPrimary        Boolean         @default(false)
+  status           ImageStatus     @default(PENDING)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  produceListing ProduceListing @relation(fields: [produceListingId], references: [id])
+  reviewer       User?          @relation("ImageReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([produceListingId])
+}
+
+model GeneratedAudio {
+  id               Int              @id @default(autoincrement())
+  uuid             String           @unique @default(uuid())
+  farmerId         Int?
+  produceListingId Int?
+  orderId          Int?
+  messageType      AudioMessageType
+  textContent      String
+  audioPath        String?
+  processingStatus ProcessingStatus @default(PENDING)
+  playedAt         DateTime?
+  farmerConfirmedAt DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  farmer         Farmer?         @relation(fields: [farmerId], references: [id])
+  produceListing ProduceListing? @relation(fields: [produceListingId], references: [id])
+  order          Order?          @relation(fields: [orderId], references: [id])
+
+  @@index([farmerId])
+  @@index([produceListingId])
+  @@index([orderId])
+}
+
+model Order {
+  id               Int           @id @default(autoincrement())
+  uuid             String        @unique @default(uuid())
+  orderNumber      String        @unique
+  buyerId          Int
+  subtotal         Decimal       @default(0)
+  deliveryFee      Decimal       @default(0)
+  totalAmount      Decimal       @default(0)
+  deliveryMethod   String?
+  deliveryLocation String?
+  paymentMethod    String?
+  paymentStatus    PaymentStatus @default(PENDING)
+  status           OrderStatus   @default(PENDING)
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  buyer          User                 @relation("BuyerOrders", fields: [buyerId], references: [id])
+  items          OrderItem[]
+  statusHistory  OrderStatusHistory[]
+  complaints     Complaint[]
+  generatedAudio GeneratedAudio[]
+
+  @@index([buyerId])
+  @@index([status])
+}
+
+model OrderItem {
+  id               Int     @id @default(autoincrement())
+  uuid             String  @unique @default(uuid())
+  orderId          Int
+  produceListingId Int
+  farmerId         Int
+  quantity         Decimal
+  unitPrice        Decimal
+  subtotal         Decimal
+
+  order          Order          @relation(fields: [orderId], references: [id])
+  produceListing ProduceListing @relation(fields: [produceListingId], references: [id])
+
+  @@index([orderId])
+  @@index([produceListingId])
+}
+
+model OrderStatusHistory {
+  id             Int          @id @default(autoincrement())
+  uuid           String       @unique @default(uuid())
+  orderId        Int
+  changedById    Int?
+  previousStatus OrderStatus?
+  newStatus      OrderStatus
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  order     Order @relation(fields: [orderId], references: [id])
+  changedBy User? @relation("StatusChangedBy", fields: [changedById], references: [id])
+
+  @@index([orderId])
+}
+
+model Complaint {
+  id           Int             @id @default(autoincrement())
+  uuid         String          @unique @default(uuid())
+  orderId      Int
+  buyerId      Int
+  category     String
+  description  String
+  status       ComplaintStatus @default(OPEN)
+  resolution   String?
+  resolvedById Int?
+  resolvedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  order      Order @relation(fields: [orderId], references: [id])
+  buyer      User  @relation("BuyerComplaints", fields: [buyerId], references: [id])
+  resolvedBy User? @relation("ComplaintResolver", fields: [resolvedById], references: [id])
+
+  @@index([orderId])
+  @@index([buyerId])
+  @@index([status])
+}
+
+model AiProcessingRun {
+  id              Int              @id @default(autoincrement())
+  uuid            String           @unique @default(uuid())
+  processableType String
+  processableId   Int
+  apiType         AiApiType
+  sessionId       String?
+  requestSummary  String?
+  responseContent String?
+  processingStatus ProcessingStatus @default(PENDING)
+  httpStatus      Int?
+  errorMessage    String?
+  attempts        Int              @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([processableType, processableId])
+  @@index([apiType])
+  @@index([processingStatus])
+}
