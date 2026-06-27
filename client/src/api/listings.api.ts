@@ -66,6 +66,7 @@ export interface Listing {
   status?: string;
   rejectionReason?: string;
   publishedAt?: string;
+  createdAt?: string;
 }
 
 export interface ListingFormPayload {
@@ -126,6 +127,7 @@ interface RawListing {
   status?: string;
   rejectionReason?: string;
   publishedAt?: string;
+  createdAt?: string;
 }
 
 interface VisionObservationPayload {
@@ -230,6 +232,7 @@ function mapListing(raw: RawListing): Listing {
     status: raw.status,
     rejectionReason: raw.rejectionReason,
     publishedAt: raw.publishedAt,
+    createdAt: raw.createdAt,
   };
 }
 
@@ -428,7 +431,7 @@ export const listingsApi = {
     await apiClient.patch(`/generated-audio/${audioId}/played`);
   },
 
-  listListings: async (params?: { status?: string; page?: number; limit?: number }): Promise<{
+  listListings: async (params?: { status?: string; search?: string; page?: number; limit?: number }): Promise<{
     listings: Listing[];
     pagination: { page: number; totalPages: number; total: number; limit?: number };
   }> => {

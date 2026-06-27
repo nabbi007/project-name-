@@ -2,7 +2,9 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { farmersApi } from '../../api/farmers.api';
-import { Button, EmptyState, Spinner } from '../../components/shared';
+import { listingsApi } from '../../api/listings.api';
+import { AgentListingCard } from '../../components/listings/AgentListingCard';
+import { Button, EmptyState, Spinner, CardSkeleton } from '../../components/shared';
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: 'English',
@@ -29,6 +31,16 @@ const FarmerProfile: React.FC = () => {
     queryFn: () => farmersApi.getFarmer(farmerId!),
     enabled: Boolean(farmerId),
   });
+
+  const { data: listingsData, isLoading: listingsLoading } = useQuery({
+    queryKey: ['agent', 'listings', 'farmer', farmerId],
+    queryFn: () => listingsApi.listListings({ limit: 50 }),
+    enabled: Boolean(farmerId),
+  });
+
+  const farmerListings = (listingsData?.listings ?? [])
+    .filter((l) => l.farmer === farmerId)
+    .slice(0, 6);
 
   if (isLoading) {
     return (
@@ -98,9 +110,30 @@ const FarmerProfile: React.FC = () => {
         </Button>
       </section>
 
-      <section className="card p-6">
-        <h2 className="text-lg font-semibold mb-2">Produce Listings</h2>
-        <EmptyState title="No listings yet" message="Create a voice listing to get started." />
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Produce listings</h2>
+          {farmerListings.length > 0 && (
+            <Link to="/agent/listings" className="text-sm text-primary-600 hover:underline">
+              All listings →
+            </Link>
+          )}
+        </div>
+        {listingsLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <CardSkeleton key={i} />
+            ))}
+          </div>
+        ) : farmerListings.length === 0 ? (
+          <EmptyState title="No listings yet" message="Create a voice listing to get started." />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {farmerListings.map((listing) => (
+              <AgentListingCard key={listing._id} listing={listing} compact />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="card p-6">
