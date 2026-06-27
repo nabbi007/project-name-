@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
 import { AppError } from '../utils/AppError';
 import { sendError, sendValidationError } from '../utils/apiResponse';
 import { isProduction } from '../config/environment';
@@ -37,6 +38,14 @@ export function errorHandler(
 
   if (err instanceof jwt.JsonWebTokenError) {
     return sendError(res, 'Invalid or expired token', 401, 'UNAUTHORIZED');
+  }
+
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'Uploaded file is too large'
+        : `Upload error: ${err.message}`;
+    return sendError(res, message, 422, 'UPLOAD_ERROR');
   }
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
