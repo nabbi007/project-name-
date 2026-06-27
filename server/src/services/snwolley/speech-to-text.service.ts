@@ -1,23 +1,25 @@
 import fs from 'fs';
 import path from 'path';
 import { AxiosError } from 'axios';
-import {
-  snwolleyClient,
-  getHackathonAuthHeader,
-} from '../../config/snwolley';
+import { hackathonClient, hackathonAuthHeader } from '../../config/snwolley';
 import { env } from '../../config/environment';
 import { AppError } from '../../utils/AppError';
 
 // ---------------------------------------------------------------------------
 // Snwolley Speech-to-Text adapter (Phase 4).
 //
-// NOTE: Adjust STT_ENDPOINT, the request body, and the response parsing below
-// to match the official Snwolley STT contract. The surrounding orchestration,
-// error handling, and manual fallback do not change when the contract does.
+// Contract (Npontu Hackathon 2026):
+//   POST {base}/api/v1/hackathon/stt
+//   Headers: X-API-Key: <team key>
+//   Body (multipart/form-data): audio (file), language (optional, default en),
+//                               session_id (optional)
+//   Success: { success: true, text: string, session_id: string }
+//   Error:   { error: string }  with HTTP 400/401/429/500/503
 // ---------------------------------------------------------------------------
 
-const STT_ENDPOINT = '/v1/speech-to-text';
+const STT_ENDPOINT = '/stt';
 const AUDIO_FIELD = 'audio';
+const DEFAULT_LANGUAGE = 'en';
 
 export interface SttResult {
   transcript: string;
@@ -47,25 +49,12 @@ function mimeForExtension(ext: string): string {
 }
 
 function extractTranscript(data: any): string {
-  // Try the most common response shapes; adjust to the real contract.
-  const candidate =
-    data?.text ??
-    data?.transcript ??
-    data?.data?.text ??
-    data?.data?.transcript ??
-    data?.result?.text ??
-    '';
+  const candidate = data?.text ?? data?.transcript ?? '';
   return typeof candidate === 'string' ? candidate.trim() : '';
 }
 
 function extractSessionId(data: any): string | null {
-  return (
-    data?.sessionId ??
-    data?.session_id ??
-    data?.id ??
-    data?.data?.sessionId ??
-    null
-  );
+  return data?.session_id ?? data?.sessionId ?? null;
 }
 
 export async function transcribeAudio(
@@ -93,14 +82,12 @@ export async function transcribeAudio(
   const form = new FormData();
   const blob = new Blob([new Uint8Array(buffer)], { type: mimeForExtension(ext) });
   form.append(AUDIO_FIELD, blob, path.basename(absoluteFilePath));
-  if (language) {
-    form.append('language', language);
-  }
+  form.append('language', language || DEFAULT_LANGUAGE);
 
   try {
-    const response = await snwolleyClient.post(STT_ENDPOINT, form, {
+    const response = await hackathonClient.post(STT_ENDPOINT, form, {
       headers: {
-        ...getHackathonAuthHeader(),
+        ...hackathonAuthHeader(),
       },
     });
 
@@ -138,6 +125,13 @@ function mapAxiosError(error: unknown): AppError {
   }
 
   const status = axiosErr.response?.status;
+  if (status === 400) {
+    return new AppError(
+      'Speech-to-text rejected the request (bad audio or missing file).',
+      422,
+      'STT_BAD_REQUEST'
+    );
+  }
   if (status === 401 || status === 403) {
     return new AppError(
       'Speech-to-text authentication failed.',
@@ -150,6 +144,13 @@ function mapAxiosError(error: unknown): AppError {
       'Speech-to-text rate limit reached. Please retry shortly.',
       502,
       'STT_RATE_LIMITED'
+    );
+  }
+  if (status === 503) {
+    return new AppError(
+      'Hackathon speech-to-text API is not currently available.',
+      503,
+      'STT_DISABLED'
     );
   }
 

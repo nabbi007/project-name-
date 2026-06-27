@@ -1,8 +1,9 @@
-// Re-exports the shared Snwolley Axios client and auth header helpers.
+// Re-exports the shared Snwolley clients and auth header helpers.
 // Concrete AI services (phases 4-8) import from here.
 export {
-  snwolleyClient,
+  hackathonClient,
+  agentClient,
   snwolleyConfig,
-  getHackathonAuthHeader,
-  getAgentAuthHeader,
+  hackathonAuthHeader,
+  agentAuthHeader,
 } from '../../config/snwolley';
