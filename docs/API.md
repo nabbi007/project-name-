@@ -75,14 +75,6 @@ A `user` object looks like:
 
 `passwordHash` is never returned.
 
-### Seeded test accounts
-
-| Role | Email | Password |
-| --- | --- | --- |
-| ADMIN | `admin@agrovoice.test` | `Admin123!` |
-| FIELD_AGENT | `agent@agrovoice.test` | `Agent123!` |
-| BUYER | `buyer@agrovoice.test` | `Buyer123!` |
-
 ---
 
 ## 3. Endpoint reference
@@ -303,31 +295,7 @@ Frontend rule of thumb: if the value starts with `http`, use it as-is; otherwise
 
 ---
 
-## 5. Differences from the current `client/src/api/*` stubs (action items)
-
-The current client stubs assume a different (Mongo-style) contract. Please reconcile:
-
-| Client assumption | Actual backend | Action |
-| --- | --- | --- |
-| `POST /auth/register-buyer` with `{ name, phone, password }` | `POST /auth/register` with `{ name, email, password, phone? }` | Rename + send `email`; collect email at signup |
-| Login `{ phone, password }` | Login `{ email, password }` | Login is by email |
-| `error.response.data.error` | `message` + `code` | Read `message` (and `code` for branching) |
-| Resource `_id` | `uuid` | Use `uuid` everywhere |
-| `GET /listings` for buyers (auto PUBLISHED) | `/listings` is agent/admin only & requires auth | Use `/marketplace/listings` (§3.10, public) for buyers |
-| Listing fields `crop`, `imageUrl`, `expiryDate`, `visionObservation` | `cropCategory.name`, `images[].imagePath`, `expiresAt`, `visualObservation` (string) + `visionDescription` | Map field names |
-| Listing status `ANALYZING/NEEDS_HUMAN_REVIEW` | image `status` + `cropMatchStatus` separate enums | See §3.8 |
-| Pagination `data.{listings,page,total}` | `data: []` + `pagination: { page, limit, total, totalPages }` | Read `pagination` |
-| Orders status `PLACED/REJECTED`, `totalPrice`, `farmerConfirmed` | Backend statuses `PENDING/CONFIRMED/…` (no PLACED/REJECTED), `totalAmount`, `statusHistory[]` (see §3.11). Farmer ack via `POST /orders/:id/farmer-confirmation` | Map status names + `totalAmount` |
-| `GET /admin/dashboard` | `GET /admin/stats` | Rename path |
-| `GET /admin/agents` + `PATCH /admin/agents/:id/status` | `GET /admin/users?role=FIELD_AGENT` + `PATCH /admin/users/:id/status` | Filter users by role |
-| Complaint status `INVESTIGATING` | `IN_REVIEW` | Map enum value |
-| `POST /complaints` with `{ orderId, message }` | Supported — `message` maps to `description` | Already compatible |
-
-All phases (marketplace §3.10, orders §3.11, complaints §3.12, audio §3.13, admin §3.14) are documented above.
-
----
-
-## 6. Quick start for the frontend
+## 5. Quick start for the frontend
 
 1. Point `VITE_API_URL` at `http://localhost:5000/api`.
 2. Auth: register/login → store `data.token` → send `Authorization: Bearer <token>`.

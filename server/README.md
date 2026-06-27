@@ -18,9 +18,10 @@ cd server
 npm install
 cp .env.example .env   # then fill in DATABASE_URL and JWT_SECRET
 npm run prisma:migrate -- --name init
-npm run seed
 npm run dev
 ```
+
+Register your first admin via the database or use `POST /api/auth/register` for buyers and `POST /api/admin/agents` (admin-only) for field agents.
 
 Server runs on `http://localhost:5000`. Health check: `GET /api/health`.
 
@@ -33,7 +34,7 @@ Server runs on `http://localhost:5000`. Health check: `GET /api/health`.
 | `npm start` | Run compiled server from `dist/` |
 | `npm run prisma:migrate` | Create/apply a migration |
 | `npm run prisma:studio` | Open Prisma Studio |
-| `npm run seed` | Seed admin + test users |
+| `npm run db:clean` | Delete all rows (users, farmers, listings, orders, …) |
 
 ## Status
 
@@ -50,14 +51,6 @@ Server runs on `http://localhost:5000`. Health check: `GET /api/health`.
 | GET | `/api/auth/me` | Authenticated |
 | POST | `/api/auth/logout` | Authenticated |
 | POST | `/api/admin/agents` | ADMIN only |
-
-## Seeded accounts
-
-After `npm run seed`:
-
-- Admin: `admin@agrovoice.test` / `Admin123!`
-- Field agent: `agent@agrovoice.test` / `Agent123!`
-- Buyer: `buyer@agrovoice.test` / `Buyer123!`
 
 ## Environment
 

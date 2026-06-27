@@ -3,8 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { farmersApi } from '../../api/farmers.api';
 import { listingsApi } from '../../api/listings.api';
+import { ordersApi } from '../../api/orders.api';
 import { AgentListingCard } from '../../components/listings/AgentListingCard';
-import { Button, EmptyState, Spinner, CardSkeleton } from '../../components/shared';
+import { Badge, Button, EmptyState, Spinner, CardSkeleton } from '../../components/shared';
+import {
+  formatOrderDate,
+  formatOrderPrice,
+  getOrderListingImage,
+  getOrderListingName,
+  getOrderStatusMeta,
+  orderDisplayId,
+} from '../../utils/orderDisplay';
+import { getCropGradient } from '../../utils/listingDisplay';
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: 'English',
@@ -41,6 +51,16 @@ const FarmerProfile: React.FC = () => {
   const farmerListings = (listingsData?.listings ?? [])
     .filter((l) => l.farmer === farmerId)
     .slice(0, 6);
+
+  const { data: ordersData, isLoading: ordersLoading } = useQuery({
+    queryKey: ['agent', 'orders', 'farmer', farmerId],
+    queryFn: () => ordersApi.getManagedOrders({ limit: 50 }),
+    enabled: Boolean(farmerId),
+  });
+
+  const farmerOrders = (ordersData?.orders ?? []).filter(
+    (o) => typeof o.farmer === 'object' && o.farmer._id === farmerId
+  );
 
   if (isLoading) {
     return (
@@ -136,15 +156,45 @@ const FarmerProfile: React.FC = () => {
         )}
       </section>
 
-      <section className="card p-6">
-        <h2 className="text-lg font-semibold mb-2">Voice Sessions</h2>
-        <EmptyState title="No voice sessions yet" />
-      </section>
-
-      <section className="card p-6">
-        <h2 className="text-lg font-semibold mb-2">Orders</h2>
-        <EmptyState title="No orders yet" />
-      </section>
+      {farmerOrders.length > 0 || ordersLoading ? (
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">Orders</h2>
+          {ordersLoading ? (
+            <CardSkeleton />
+          ) : (
+            <div className="space-y-3">
+              {farmerOrders.map((order) => {
+                const crop = getOrderListingName(order);
+                const imageUrl = getOrderListingImage(order);
+                const gradient = getCropGradient(crop);
+                const status = getOrderStatusMeta(order.status);
+                return (
+                  <div key={order._id} className="card p-4 flex gap-4 items-center">
+                    <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 border border-surface-100">
+                      {imageUrl ? (
+                        <img src={imageUrl} alt={crop} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-lg`}>
+                          🌾
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-xs text-surface-500">{orderDisplayId(order)}</p>
+                      <p className="font-medium capitalize truncate">{crop}</p>
+                      <p className="text-xs text-surface-500">{formatOrderDate(order.createdAt)}</p>
+                    </div>
+                    <div className="text-right shrink-0 space-y-1">
+                      <Badge color={status.color}>{status.label}</Badge>
+                      <p className="text-sm font-semibold">{formatOrderPrice(order.totalPrice)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 };

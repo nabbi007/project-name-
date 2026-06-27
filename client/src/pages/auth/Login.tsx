@@ -90,7 +90,7 @@ const Login: React.FC = () => {
             <Input
               label="Email"
               type="email"
-              placeholder="e.g. agent@agrovoice.test"
+              placeholder="you@example.com"
               error={errors.email?.message}
               {...register('email')}
             />

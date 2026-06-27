@@ -48,6 +48,16 @@ const listSelect = {
   farmer: {
     select: { uuid: true, fullName: true, displayName: true, region: true, community: true, status: true },
   },
+  images: {
+    select: {
+      uuid: true,
+      imagePath: true,
+      status: true,
+      cropMatchStatus: true,
+      isPrimary: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  },
 } satisfies Prisma.ProduceListingSelect;
 
 const detailSelect = {

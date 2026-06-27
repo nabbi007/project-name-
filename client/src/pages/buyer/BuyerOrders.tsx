@@ -7,18 +7,15 @@ import { Badge } from '../../components/shared/Badge';
 import { ErrorAlert } from '../../components/shared/Alerts';
 import { EmptyState } from '../../components/shared/EmptyState';
 import { CardSkeleton } from '../../components/shared/Skeleton';
-
-const getStatusColor = (status: string): "green" | "yellow" | "red" | "blue" | "gray" | "purple" => {
-  switch (status) {
-    case 'PLACED': return 'blue';
-    case 'CONFIRMED': return 'purple';
-    case 'AWAITING_COLLECTION': return 'yellow';
-    case 'COLLECTED': return 'green';
-    case 'CANCELLED': return 'gray';
-    case 'REJECTED': return 'red';
-    default: return 'gray';
-  }
-};
+import {
+  formatOrderDate,
+  formatOrderPrice,
+  getOrderListingImage,
+  getOrderListingName,
+  getOrderStatusMeta,
+  orderDisplayId,
+} from '../../utils/orderDisplay';
+import { getCropGradient } from '../../utils/listingDisplay';
 
 const BuyerOrders: React.FC = () => {
   const { data, isLoading, isError, refetch } = useQuery({
@@ -27,14 +24,6 @@ const BuyerOrders: React.FC = () => {
   });
 
   const orders = data?.data?.orders || [];
-
-  const formatPrice = (price: number) => `GH₵ ${price.toFixed(2)}`;
-  
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric'
-    });
-  };
 
   if (isError) {
     return (
@@ -79,36 +68,47 @@ const BuyerOrders: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-4">
         {orders.map((order) => {
-          const listingName = typeof order.listing === 'object' ? order.listing.crop : 'Produce';
-          
+          const listingName = getOrderListingName(order);
+          const imageUrl = getOrderListingImage(order);
+          const gradient = getCropGradient(listingName);
+          const statusMeta = getOrderStatusMeta(order.status);
+
           return (
             <Link key={order._id} to={`/buyer/orders/${order._id}`} className="block group">
-              <Card className="flex flex-col sm:flex-row justify-between gap-4 !p-5 hover:border-primary-300 transition-colors">
-                
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="font-mono text-sm text-surface-500">#{order._id.slice(-6).toUpperCase()}</span>
-                    <Badge color={getStatusColor(order.status)}>
-                      {order.status.replace(/_/g, ' ')}
-                    </Badge>
-                  </div>
-                  <h3 className="font-semibold text-surface-900 capitalize text-lg group-hover:text-primary-700 transition-colors">
-                    {listingName}
-                  </h3>
-                  <p className="text-sm text-surface-500 mt-1">
-                    Placed on {formatDate(order.createdAt)}
-                  </p>
+              <Card className="flex flex-col sm:flex-row gap-4 !p-5 hover:border-primary-300 transition-colors">
+                <div className="w-full sm:w-24 h-32 sm:h-24 rounded-xl overflow-hidden shrink-0 border border-surface-100">
+                  {imageUrl ? (
+                    <img src={imageUrl} alt={listingName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+                      <span className="text-3xl">🌾</span>
+                    </div>
+                  )}
                 </div>
 
-                <div className="sm:text-right flex flex-col justify-between">
-                  <div className="font-bold text-lg text-surface-900">
-                    {formatPrice(order.totalPrice)}
+                <div className="flex-1 flex flex-col sm:flex-row sm:justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="font-mono text-sm text-surface-500">{orderDisplayId(order)}</span>
+                      <Badge color={statusMeta.color}>{statusMeta.label}</Badge>
+                    </div>
+                    <h3 className="font-semibold text-surface-900 capitalize text-lg group-hover:text-primary-700 transition-colors">
+                      {listingName}
+                    </h3>
+                    <p className="text-sm text-surface-500 mt-1">
+                      Placed {formatOrderDate(order.createdAt)}
+                    </p>
                   </div>
-                  <div className="text-sm text-surface-500 mt-1 sm:mt-0">
-                    {order.quantity} units
+
+                  <div className="sm:text-right flex flex-col justify-center">
+                    <div className="font-bold text-lg text-surface-900">
+                      {formatOrderPrice(order.totalPrice)}
+                    </div>
+                    <div className="text-sm text-surface-500 mt-1">
+                      {order.quantity} units
+                    </div>
                   </div>
                 </div>
-                
               </Card>
             </Link>
           );

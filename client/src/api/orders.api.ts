@@ -197,4 +197,32 @@ export const ordersApi = {
       data: { order: mapOrder(data.data.order) },
     };
   },
+
+  getManagedOrders: async (params?: { status?: string; page?: number; limit?: number }) => {
+    const { data } = await apiClient.get<{
+      success: boolean;
+      data: RawOrder[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>('/orders', { params });
+
+    return {
+      orders: data.data.map(mapOrder),
+      pagination: data.pagination,
+    };
+  },
+
+  updateOrderStatus: async (id: string, payload: { status: Order['status']; notes?: string }) => {
+    const { data } = await apiClient.patch<{ success: boolean; data: { order: RawOrder } }>(
+      `/orders/${id}/status`,
+      payload
+    );
+    return mapOrder(data.data.order);
+  },
+
+  confirmFarmerOrder: async (id: string) => {
+    const { data } = await apiClient.post<{ success: boolean; data: { order: RawOrder } }>(
+      `/orders/${id}/farmer-confirmation`
+    );
+    return mapOrder(data.data.order);
+  },
 };

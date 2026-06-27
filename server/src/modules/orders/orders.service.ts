@@ -59,6 +59,7 @@ const orderSelect = {
   notes: true,
   createdAt: true,
   updatedAt: true,
+  buyer: { select: { uuid: true, name: true, phone: true } },
   items: {
     select: {
       uuid: true,
@@ -74,6 +75,10 @@ const orderSelect = {
           cropCategory: { select: { name: true, slug: true } },
           farmer: {
             select: { uuid: true, fullName: true, displayName: true, region: true, community: true },
+          },
+          images: {
+            select: { uuid: true, imagePath: true, isPrimary: true },
+            orderBy: { createdAt: 'asc' },
           },
         },
       },

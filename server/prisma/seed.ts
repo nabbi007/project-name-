@@ -2,7 +2,6 @@ import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
-
 const SALT_ROUNDS = 12;
 
 async function upsertUser(params: {
@@ -20,6 +19,7 @@ async function upsertUser(params: {
       phone: params.phone,
       role: params.role,
       status: UserStatus.ACTIVE,
+      passwordHash,
     },
     create: {
       name: params.name,
@@ -30,10 +30,11 @@ async function upsertUser(params: {
       status: UserStatus.ACTIVE,
     },
   });
-  console.log(`Seeded ${params.role}: ${params.email}`);
+  console.log(`  ${params.role}: ${params.email}`);
 }
 
 async function main(): Promise<void> {
+  console.log('Dev accounts (local testing only):');
   await upsertUser({
     name: 'AgroVoice Admin',
     email: 'admin@agrovoice.test',
@@ -41,7 +42,6 @@ async function main(): Promise<void> {
     password: 'Admin123!',
     role: UserRole.ADMIN,
   });
-
   await upsertUser({
     name: 'Test Field Agent',
     email: 'agent@agrovoice.test',
@@ -49,7 +49,6 @@ async function main(): Promise<void> {
     password: 'Agent123!',
     role: UserRole.FIELD_AGENT,
   });
-
   await upsertUser({
     name: 'Test Buyer',
     email: 'buyer@agrovoice.test',
@@ -57,8 +56,7 @@ async function main(): Promise<void> {
     password: 'Buyer123!',
     role: UserRole.BUYER,
   });
-
-  console.log('Seed complete.');
+  console.log('Done.');
 }
 
 main()
