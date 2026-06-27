@@ -14,6 +14,7 @@ import {
 } from '../modules/listings/images.routes';
 import listingRoutes from '../modules/listings/listings.routes';
 import cropRoutes from '../modules/crops/crops.routes';
+import marketplaceRoutes from '../modules/marketplace/marketplace.routes';
 
 const router = Router();
 
@@ -27,6 +28,9 @@ router.use('/farmers', voiceFarmerRoutes);
 router.use('/farmers', farmerRoutes);
 router.use('/voice-sessions', voiceSessionRoutes);
 router.use('/voice-responses', voiceResponseRoutes);
+
+// Public marketplace (Phase 9)
+router.use('/marketplace', marketplaceRoutes);
 
 // Crop categories (Phase 7)
 router.use('/crop-categories', cropRoutes);

@@ -2,7 +2,7 @@
 
 This document is the contract between the AgroVoice **backend** (`server/`) and the **React frontend** (`client/`). It describes every endpoint currently implemented, the response envelope, authentication, roles, enums, file uploads, and the AI-failure fallbacks.
 
-> Status: Phases 1–7 implemented (auth, farmers, voice/STT, listing extraction, vision, listing management/publication). Phases 8–11 (TTS, public marketplace, orders, administration) are in progress.
+> Status: Phases 1–7 + 9 implemented (auth, farmers, voice/STT, listing extraction, vision, listing management/publication, public marketplace). Phases 8, 10, 11 (TTS, orders, administration) are in progress.
 
 ---
 
@@ -193,7 +193,22 @@ Field agents only see/modify their own farmers; admins see all. Accessing anothe
 - `status`: `DRAFT | PROCESSING | PENDING_REVIEW | PUBLISHED | RESERVED | SOLD_OUT | EXPIRED | REJECTED`.
 - **Publish requirements** — if unmet, returns 422 with `errors.publication: string[]`:
   active farmer · recorded consent · valid crop category · quantity > 0 · price > 0 · availability date · at least one crop image · agent-confirmed.
-- This `GET /listings` is **agent/admin scoped and requires auth**. The public buyer marketplace is a separate set of endpoints under `/marketplace/*` (Phase 9, coming next).
+- This `GET /listings` is **agent/admin scoped and requires auth**. The public buyer marketplace is a separate set of endpoints under `/marketplace/*` (see §3.10).
+
+### 3.10 Public marketplace (🔓 no auth)
+
+Only `PUBLISHED`, in-stock (`availableQuantity > 0`), non-expired listings are exposed. **Farmer phone numbers are never included.**
+
+| Method | Path | Query | Returns |
+| --- | --- | --- | --- |
+| GET | `/marketplace/listings` | `?crop=&region=&community=&minPrice=&maxPrice=&search=&sort=&page=&limit=` | paginated public listings |
+| GET | `/marketplace/listings/:listingId` | — | `{ listing }` (404 if not publicly visible) |
+| GET | `/marketplace/farmers/:farmerId` | — | `{ farmer, listings }` (public profile + their published listings) |
+
+- `sort`: `newest` (default) · `price_asc` · `price_desc`.
+- `crop` matches the crop category name/slug or listing title (case-insensitive). `region`/`community` are case-insensitive contains.
+- Public listing/farmer payloads expose `farmer: { uuid, fullName, displayName, region, district, community }` only — no `phone`, no agent/internal fields.
+- Images are limited to `ANALYSED`/`REVIEWED` ones, primary first.
 
 ---
 
@@ -222,7 +237,7 @@ The current client stubs assume a different (Mongo-style) contract. Please recon
 | Login `{ phone, password }` | Login `{ email, password }` | Login is by email |
 | `error.response.data.error` | `message` + `code` | Read `message` (and `code` for branching) |
 | Resource `_id` | `uuid` | Use `uuid` everywhere |
-| `GET /listings` for buyers (auto PUBLISHED) | `/listings` is agent/admin only & requires auth | Use `/marketplace/listings` (Phase 9) for buyers |
+| `GET /listings` for buyers (auto PUBLISHED) | `/listings` is agent/admin only & requires auth | Use `/marketplace/listings` (§3.10, public) for buyers |
 | Listing fields `crop`, `imageUrl`, `expiryDate`, `visionObservation` | `cropCategory.name`, `images[].imagePath`, `expiresAt`, `visualObservation` (string) + `visionDescription` | Map field names |
 | Listing status `ANALYZING/NEEDS_HUMAN_REVIEW` | image `status` + `cropMatchStatus` separate enums | See §3.8 |
 | Pagination `data.{listings,page,total}` | `data: []` + `pagination: { page, limit, total, totalPages }` | Read `pagination` |
