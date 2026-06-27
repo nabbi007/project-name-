@@ -2,7 +2,7 @@
 
 This document is the contract between the AgroVoice **backend** (`server/`) and the **React frontend** (`client/`). It describes every endpoint currently implemented, the response envelope, authentication, roles, enums, file uploads, and the AI-failure fallbacks.
 
-> Status: Phases 1–7, 9, 10 implemented (auth, farmers, voice/STT, listing extraction, vision, listing management/publication, public marketplace, orders/inventory). Phases 8 & 11 (TTS, administration) are in progress.
+> Status: Phases 1–10 implemented (auth, farmers, voice/STT, listing extraction, vision, listing management/publication, TTS notifications, public marketplace, orders/inventory). Phase 11 (administration) is in progress.
 
 ---
 
@@ -228,6 +228,21 @@ Buyers place and cancel orders; field agents/admins fulfil them. Placing an orde
 - Allowed agent transitions: PENDING→CONFIRMED/CANCELLED; CONFIRMED→AWAITING_COLLECTION/READY_FOR_PICKUP/IN_TRANSIT/CANCELLED; AWAITING_COLLECTION|READY_FOR_PICKUP→COLLECTED/CANCELLED; IN_TRANSIT→DELIVERED/CANCELLED; COLLECTED|DELIVERED→COMPLETED/DISPUTED. Invalid jumps return 400 `INVALID_STATUS_TRANSITION`.
 - An order is single-listing. `order.items[]` each carry `quantity`, `unitPrice`, `subtotal`, and the listing/farmer summary. `order.statusHistory[]` records every change. Farmer phone is not included.
 - Over-ordering returns 400 `INSUFFICIENT_STOCK`.
+
+### 3.12 Generated audio / TTS notifications (auth + FIELD_AGENT/ADMIN)
+
+Generates spoken (WAV) notifications for farmers via Snwolley TTS.
+
+| Method | Path | Body | Returns |
+| --- | --- | --- | --- |
+| POST | `/listings/:listingId/audio` | `{ language? }` | `{ audio }` (LISTING_PUBLISHED) |
+| POST | `/orders/:orderId/audio` | `{ messageType: NEW_ORDER\|ORDER_CANCELLED, language? }` | `{ audio }` |
+| GET | `/generated-audio/:audioId` | — | `{ audio }` |
+| PATCH | `/generated-audio/:audioId/played` | — | `{ audio }` (sets `playedAt`) |
+
+- `audio`: `{ uuid, messageType, textContent, audioPath, processingStatus, playedAt, createdAt }`.
+- `processingStatus`: `PENDING | PROCESSING | COMPLETED | FAILED`. The WAV is at `audioPath` (e.g. `uploads/generated-audio/<id>.wav`) — serve from `http://localhost:5000/<audioPath>`.
+- Buyers cannot access generated audio (farmer-facing). TTS failures return handled `TTS_*` codes, never a 500.
 
 ---
 

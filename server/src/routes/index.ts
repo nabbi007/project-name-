@@ -16,6 +16,11 @@ import listingRoutes from '../modules/listings/listings.routes';
 import cropRoutes from '../modules/crops/crops.routes';
 import marketplaceRoutes from '../modules/marketplace/marketplace.routes';
 import orderRoutes from '../modules/orders/orders.routes';
+import {
+  listingAudioRoutes,
+  orderAudioRoutes,
+  generatedAudioRoutes,
+} from '../modules/audio/audio.routes';
 
 const router = Router();
 
@@ -39,10 +44,15 @@ router.use('/orders', orderRoutes);
 // Crop categories (Phase 7)
 router.use('/crop-categories', cropRoutes);
 
-// Listings: images (Phase 6) + management/publication (Phase 7)
+// Listings: images (Phase 6) + management/publication (Phase 7) + audio (Phase 8)
 router.use('/listings', listingImageRoutes);
+router.use('/listings', listingAudioRoutes);
 router.use('/listings', listingRoutes);
 router.use('/listing-images', imageRoutes);
+
+// Generated audio / TTS notifications (Phase 8)
+router.use('/orders', orderAudioRoutes);
+router.use('/generated-audio', generatedAudioRoutes);
 
 // Placeholder mounts for upcoming phases (8-11). Teammates can replace these
 // with their module routers.
