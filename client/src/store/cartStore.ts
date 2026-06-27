@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface CartItem {
   listingId: string;
@@ -21,46 +22,58 @@ interface CartState {
   getItemCount: () => number;
 }
 
-export const useCartStore = create<CartState>((set, get) => ({
-  items: [],
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
+      items: [],
 
-  addItem: (item: CartItem) => {
-    set((state) => {
-      const existing = state.items.find((i) => i.listingId === item.listingId);
-      if (existing) {
-        return {
+      addItem: (item: CartItem) => {
+        set((state) => {
+          const existing = state.items.find((i) => i.listingId === item.listingId);
+          if (existing) {
+            return {
+              items: state.items.map((i) =>
+                i.listingId === item.listingId
+                  ? {
+                      ...i,
+                      quantity: Math.min(i.quantity + item.quantity, item.maxQuantity),
+                      maxQuantity: item.maxQuantity,
+                      priceSnapshot: item.priceSnapshot,
+                    }
+                  : i
+              ),
+            };
+          }
+          return { items: [...state.items, item] };
+        });
+      },
+
+      removeItem: (listingId: string) => {
+        set((state) => ({
+          items: state.items.filter((i) => i.listingId !== listingId),
+        }));
+      },
+
+      updateQuantity: (listingId: string, quantity: number) => {
+        set((state) => ({
           items: state.items.map((i) =>
-            i.listingId === item.listingId
-              ? { ...i, quantity: Math.min(i.quantity + item.quantity, item.maxQuantity) }
+            i.listingId === listingId
+              ? { ...i, quantity: Math.max(1, Math.min(quantity, i.maxQuantity)) }
               : i
           ),
-        };
-      }
-      return { items: [...state.items, item] };
-    });
-  },
+        }));
+      },
 
-  removeItem: (listingId: string) => {
-    set((state) => ({
-      items: state.items.filter((i) => i.listingId !== listingId),
-    }));
-  },
+      clearCart: () => set({ items: [] }),
 
-  updateQuantity: (listingId: string, quantity: number) => {
-    set((state) => ({
-      items: state.items.map((i) =>
-        i.listingId === listingId ? { ...i, quantity: Math.max(1, quantity) } : i
-      ),
-    }));
-  },
+      getTotal: () => {
+        return get().items.reduce((sum, item) => sum + item.priceSnapshot * item.quantity, 0);
+      },
 
-  clearCart: () => set({ items: [] }),
-
-  getTotal: () => {
-    return get().items.reduce((sum, item) => sum + item.priceSnapshot * item.quantity, 0);
-  },
-
-  getItemCount: () => {
-    return get().items.reduce((count, item) => count + item.quantity, 0);
-  },
-}));
+      getItemCount: () => {
+        return get().items.reduce((count, item) => count + item.quantity, 0);
+      },
+    }),
+    { name: 'agrovoice-cart' }
+  )
+);

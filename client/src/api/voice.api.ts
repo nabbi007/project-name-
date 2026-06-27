@@ -75,20 +75,33 @@ function mapSession(raw: RawVoiceSession): VoiceSession {
 
 export interface UploadVoiceResponseResult {
   transcript: string;
+  originalTranscript?: string;
   step: VoiceStep;
   responseId: string;
   transcriptionFailed?: boolean;
   errorMessage?: string;
 }
 
+function displayTranscript(response: RawVoiceResponse): string {
+  return (response.correctedTranscript ?? response.transcript ?? '').trim();
+}
+
+function originalTranscript(response: RawVoiceResponse): string | undefined {
+  const local = response.transcript?.trim();
+  const english = response.correctedTranscript?.trim();
+  if (local && english && local !== english) return local;
+  return undefined;
+}
+
 function parseVoiceResponse(response: RawVoiceResponse, step: VoiceStep): UploadVoiceResponseResult {
-  const transcript = (response.correctedTranscript ?? response.transcript ?? '').trim();
+  const transcript = displayTranscript(response);
   const transcriptionFailed =
     response.processingStatus === 'FAILED' ||
     (response.processingStatus === 'COMPLETED' && !transcript);
 
   return {
     transcript,
+    originalTranscript: originalTranscript(response),
     step,
     responseId: response.uuid,
     transcriptionFailed,
@@ -156,21 +169,37 @@ export const voiceApi = {
   },
 
   retryTranscription: async (responseId: string): Promise<UploadVoiceResponseResult> => {
-    const { data } = await apiClient.post<{
-      success: boolean;
-      data: { response: RawVoiceResponse };
-    }>(`/voice-responses/${responseId}/retry`, {}, { timeout: 120000 });
+    try {
+      const { data } = await apiClient.post<{
+        success: boolean;
+        data: { response: RawVoiceResponse };
+      }>(`/voice-responses/${responseId}/retry`, {}, { timeout: 120000 });
 
-    return parseVoiceResponse(data.data.response, 'CROP');
+      return parseVoiceResponse(data.data.response, 'CROP');
+    } catch (error) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        'Speech-to-text failed. Type what the farmer said, or record again.';
+      return {
+        transcript: '',
+        step: 'CROP',
+        responseId,
+        transcriptionFailed: true,
+        errorMessage: message,
+      };
+    }
   },
 
   editVoiceResponse: async (
     sessionId: string,
     step: VoiceStep,
     editedTranscript: string,
-    responseId?: string
+    responseId?: string,
+    originalTranscript?: string
   ): Promise<void> => {
-    const body = { transcript: editedTranscript };
+    const body = originalTranscript
+      ? { correctedTranscript: editedTranscript }
+      : { transcript: editedTranscript };
 
     if (responseId) {
       await apiClient.patch(`/voice-responses/${responseId}/transcript`, body);

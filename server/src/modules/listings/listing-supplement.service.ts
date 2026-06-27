@@ -2,8 +2,13 @@ import { UserRole } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { transcribeAudioBuffer } from '../../services/snwolley/speech-to-text.service';
+import {
+  displayTranscript,
+  localizeTranscript,
+} from '../../services/snwolley/transcript-localization.service';
 import { extractFromTranscriptLocally } from './transcript-extract.util';
 import { listingIncompleteFields } from './missing-field-prompts';
+import { extractSupplementViaAgent } from '../../services/snwolley/supplement-extract.service';
 import { updateListing, type Actor } from './listings.service';
 import type { UpdateListingInput } from './listings.validators';
 
@@ -33,8 +38,33 @@ export async function supplementListingFromVoice(
   });
   if (!listing) throw AppError.notFound('Listing not found');
 
+  const missingBefore = listingIncompleteFields(listing);
+
   const stt = await transcribeAudioBuffer(buffer, filename, language);
-  const { extracted } = extractFromTranscriptLocally(stt.transcript);
+  const localized = await localizeTranscript(stt.transcript, language);
+  const englishTranscript = displayTranscript(localized);
+  let { extracted } = extractFromTranscriptLocally(englishTranscript);
+
+  if (missingBefore.length > 0) {
+    const agentExtracted = await extractSupplementViaAgent(
+      englishTranscript,
+      localized.transcript,
+      language,
+      missingBefore
+    );
+    if (agentExtracted) {
+      extracted = {
+        ...extracted,
+        crop: extracted.crop ?? agentExtracted.crop,
+        quantity: extracted.quantity ?? agentExtracted.quantity,
+        unit: extracted.unit ?? agentExtracted.unit,
+        pricePerUnit: extracted.pricePerUnit ?? agentExtracted.pricePerUnit,
+        availableDate: extracted.availableDate ?? agentExtracted.availableDate,
+        expiryDate: extracted.expiryDate ?? agentExtracted.expiryDate,
+        description: extracted.description ?? agentExtracted.description,
+      };
+    }
+  }
 
   const patch: UpdateListingInput = {};
 
@@ -95,7 +125,7 @@ export async function supplementListingFromVoice(
     }
   }
 
-  const desc = [listing.description, stt.transcript].filter(Boolean).join(' ').trim();
+  const desc = [listing.description, englishTranscript].filter(Boolean).join(' ').trim();
   if (desc) patch.description = desc;
 
   if (Object.keys(patch).length === 0) {
@@ -113,12 +143,12 @@ export async function supplementListingFromVoice(
     unit: updated.unit,
     pricePerUnit: updated.pricePerUnit,
     availableDate: updated.availableDate,
-    cropCategory: updated.cropCategory,
   });
 
   return {
     listing: updated,
-    transcript: stt.transcript,
+    transcript: englishTranscript,
+    originalTranscript: localized.translated ? localized.transcript : undefined,
     filledFields: Object.keys(patch),
     incompleteFields,
   };

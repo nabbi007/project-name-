@@ -1,6 +1,7 @@
 import { createApp } from '../src/app';
 import { prisma } from '../src/config/database';
 import { parseExtraction } from '../src/modules/listings/listing-extraction.service';
+import { extractFromTranscriptLocally } from '../src/modules/listings/transcript-extract.util';
 
 const checks: { name: string; pass: boolean }[] = [];
 function check(name: string, pass: boolean, detail?: unknown) {
@@ -42,6 +43,22 @@ function unitTests(): void {
   // 5. Prose around JSON still extracted
   const e = parseExtraction('Here is the listing: {"crop":"Pepper","quantity":3,"unit":"CRATE","pricePerUnit":90,"availableDate":"2026-07-10","description":"Three crates."} Hope this helps!');
   check('extracts JSON embedded in prose', !!e && e.extracted.crop === 'Pepper' && e.incompleteFields.length === 0, e);
+
+  // 6. Twi / mixed farmer speech (local fallback)
+  const twi = extractFromTranscriptLocally(
+    'Me wɔ tomato ahodo 10, basket biara GH₵180, ready next week'
+  );
+  check(
+    'parses Twi tomato listing locally',
+    twi.extracted.crop?.toLowerCase() === 'tomato' &&
+      twi.extracted.quantity === 10 &&
+      twi.extracted.unit === 'BASKET' &&
+      twi.extracted.pricePerUnit === 180 &&
+      !!twi.extracted.availableDate &&
+      !twi.incompleteFields.includes('quantity') &&
+      !twi.incompleteFields.includes('availableDate'),
+    twi
+  );
 }
 
 async function run(): Promise<void> {

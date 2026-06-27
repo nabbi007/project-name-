@@ -405,7 +405,7 @@ export const listingsApi = {
     id: string,
     audioBlob: Blob,
     language?: string
-  ): Promise<{ listing: Listing; incompleteFields: string[]; transcript: string }> => {
+  ): Promise<{ listing: Listing; incompleteFields: string[]; transcript: string; originalTranscript?: string }> => {
     const wav = await blobToWav(audioBlob);
     const form = new FormData();
     form.append('audio', wav, 'supplement.wav');
@@ -417,6 +417,7 @@ export const listingsApi = {
         listing: RawListing;
         incompleteFields?: string[];
         transcript?: string;
+        originalTranscript?: string;
       };
     }>(`/listings/${id}/supplement-voice`, form);
 
@@ -424,6 +425,7 @@ export const listingsApi = {
       listing: mapListing(data.data.listing),
       incompleteFields: filterVoiceGapFields(data.data.incompleteFields ?? []),
       transcript: data.data.transcript ?? '',
+      originalTranscript: data.data.originalTranscript,
     };
   },
 

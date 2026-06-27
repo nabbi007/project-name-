@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { redirectAfterAuth, sanitizeRedirect } from '../../utils/authRedirect';
 import { authApi } from '../../api/auth.api';
 import { Input } from '../../components/shared/Input';
 import { Button } from '../../components/shared/Button';
@@ -26,6 +27,8 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
   const { login } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,7 +52,7 @@ const Register: React.FC = () => {
         password: formData.password,
       });
       login(response.data.token, response.data.user);
-      navigate('/marketplace', { replace: true });
+      navigate(redirectAfterAuth('BUYER', redirectParam), { replace: true });
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } };
       if (axiosError.response?.data?.message) {
@@ -128,7 +131,14 @@ const Register: React.FC = () => {
 
           <p className="text-center text-sm text-surface-500 mt-6">
             Already have an account?{' '}
-            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+            <Link
+              to={
+                sanitizeRedirect(redirectParam)
+                  ? `/login?redirect=${encodeURIComponent(sanitizeRedirect(redirectParam)!)}`
+                  : '/login'
+              }
+              className="text-primary-600 hover:text-primary-700 font-medium"
+            >
               Sign in
             </Link>
           </p>

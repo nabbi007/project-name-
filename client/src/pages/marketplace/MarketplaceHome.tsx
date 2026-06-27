@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { marketplaceApi } from '../../api/marketplace.api';
 import { ListingCard } from '../../components/marketplace/ListingCard';
+import { MarketplaceNav } from '../../components/marketplace/MarketplaceNav';
 import { SearchInput } from '../../components/shared/SearchInput';
 import { Button } from '../../components/shared/Button';
 import { CardSkeleton } from '../../components/shared/Skeleton';
@@ -58,38 +59,7 @@ const MarketplaceHome: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-surface-50">
-      {/* ─── Navigation Bar ─────────────────────────────────── */}
-      <nav className="bg-white border-b border-surface-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-                <span className="text-white text-sm font-bold">A</span>
-              </div>
-              <span className="text-lg font-bold text-surface-900">AgroVoice</span>
-            </Link>
-            <div className="flex items-center gap-3">
-              <Link to="/marketplace">
-                <Button variant="ghost" size="sm">Browse All</Button>
-              </Link>
-              {isAuthenticated() ? (
-                <Link to="/buyer/orders">
-                  <Button variant="secondary" size="sm">My Orders</Button>
-                </Link>
-              ) : (
-                <>
-                  <Link to="/login">
-                    <Button variant="ghost" size="sm">Sign In</Button>
-                  </Link>
-                  <Link to="/register">
-                    <Button variant="primary" size="sm">Register</Button>
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+      <MarketplaceNav />
 
       {/* ─── Hero Section ───────────────────────────────────── */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800">

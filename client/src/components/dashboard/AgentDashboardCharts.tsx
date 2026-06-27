@@ -57,7 +57,7 @@ export function DonutChart({
             cy="50"
             r={radius}
             fill="none"
-            stroke="#dfd6c8"
+            stroke="#e7e5e4"
             strokeWidth={stroke}
           />,
         ];
@@ -131,7 +131,7 @@ export function HorizontalBarChart({ items }: { items: BarItem[] }) {
             <span className="text-xs text-surface-500">{item.label}</span>
             <span className="text-xs font-medium text-surface-900 tabular-nums">{item.value}</span>
           </div>
-          <div className="h-1.5 bg-cream-200 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-surface-200 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-700 ease-out"
               style={{
@@ -148,42 +148,32 @@ export function HorizontalBarChart({ items }: { items: BarItem[] }) {
 
 interface DashboardChartsProps {
   farmerCount: number;
-  totalListings: number;
   liveCount: number;
-  draftCount: number;
   pendingOrders?: number;
 }
 
 export const AgentDashboardCharts: React.FC<DashboardChartsProps> = ({
   farmerCount,
-  totalListings,
   liveCount,
-  draftCount,
   pendingOrders = 0,
 }) => {
-  const otherListings = Math.max(0, totalListings - liveCount - draftCount);
-
   const listingSegments: ChartSegment[] = [
     { label: 'Live', value: liveCount, color: '#22c55e' },
-    { label: 'Drafts', value: draftCount, color: '#eab308' },
-    { label: 'Other', value: otherListings, color: '#525252' },
   ];
 
   const overviewBars: BarItem[] = [
     { label: 'Farmers', value: farmerCount, color: '#3b82f6' },
-    { label: 'Listings', value: totalListings, color: '#737373' },
-    { label: 'Live', value: liveCount, color: '#22c55e' },
-    { label: 'Drafts', value: draftCount, color: '#eab308' },
+    { label: 'Live listings', value: liveCount, color: '#22c55e' },
     { label: 'Pending orders', value: pendingOrders, color: '#a78bfa' },
   ];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div className="card p-5">
-        <h2 className="text-sm font-semibold text-surface-900">Listings</h2>
-        <p className="text-xs text-surface-500 mt-0.5 mb-4">By status</p>
+        <h2 className="text-sm font-semibold text-surface-900">Live listings</h2>
+        <p className="text-xs text-surface-500 mt-0.5 mb-4">Published on the marketplace</p>
         <div className="flex items-center gap-5">
-          <DonutChart segments={listingSegments} centerLabel={String(totalListings)} centerSub="total" />
+          <DonutChart segments={listingSegments} centerLabel={String(liveCount)} centerSub="live" />
           <ChartLegend segments={listingSegments} />
         </div>
       </div>

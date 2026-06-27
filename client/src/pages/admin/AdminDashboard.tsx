@@ -1,17 +1,8 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../api/admin.api';
-import { Button, ErrorAlert, Skeleton } from '../../components/shared';
-
-const STAT_CARDS = [
-  { key: 'totalFarmers' as const, label: 'Total farmers' },
-  { key: 'totalAgents' as const, label: 'Total agents' },
-  { key: 'publishedListings' as const, label: 'Live listings' },
-  { key: 'pendingListings' as const, label: 'Pending listings' },
-  { key: 'totalOrders' as const, label: 'Total orders' },
-  { key: 'completedOrders' as const, label: 'Completed orders' },
-  { key: 'failedAiRequests' as const, label: 'Failed AI requests' },
-];
+import { AdminDashboardCharts } from '../../components/dashboard/AdminDashboardCharts';
+import { Button, ErrorAlert } from '../../components/shared';
 
 const AdminDashboard: React.FC = () => {
   const { data, isLoading, isError, refetch } = useQuery({
@@ -29,13 +20,12 @@ const AdminDashboard: React.FC = () => {
       </div>
 
       {isLoading && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {STAT_CARDS.map((card) => (
-            <div key={card.key} className="card px-4 py-4">
-              <Skeleton className="h-3 w-20 mb-3" />
-              <Skeleton className="h-8 w-12" />
-            </div>
-          ))}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="card h-56 animate-pulse bg-surface-100" />
+            <div className="card h-56 animate-pulse bg-surface-100" />
+          </div>
+          <div className="card h-72 animate-pulse bg-surface-100" />
         </div>
       )}
 
@@ -48,18 +38,7 @@ const AdminDashboard: React.FC = () => {
         </ErrorAlert>
       )}
 
-      {!isLoading && !isError && data && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {STAT_CARDS.map((card) => (
-            <div key={card.key} className="card px-4 py-4">
-              <p className="text-xs text-surface-500">{card.label}</p>
-              <p className="text-2xl font-semibold text-surface-900 mt-1 tabular-nums">
-                {data[card.key]}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+      {!isLoading && !isError && data && <AdminDashboardCharts stats={data} />}
     </div>
   );
 };

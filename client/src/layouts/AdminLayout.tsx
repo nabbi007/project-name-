@@ -104,14 +104,14 @@ const AdminLayout: React.FC = () => {
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 min-h-[40px] px-3 py-2 rounded-md text-sm font-medium transition-colors ${
       isActive
-        ? 'bg-cream-200 text-surface-900'
-        : 'text-surface-600 hover:bg-cream-150 hover:text-surface-900'
+        ? 'bg-surface-100 text-surface-900'
+        : 'text-surface-600 hover:bg-surface-50 hover:text-surface-900'
     }`;
 
   return (
     <div className="admin-console min-h-screen flex">
-      <aside className="shrink-0 w-60 sticky top-0 h-screen bg-cream-50 border-r border-cream-200 flex flex-col">
-        <div className="px-4 py-5 border-b border-cream-200">
+      <aside className="shrink-0 w-60 sticky top-0 h-screen bg-white border-r border-surface-200 flex flex-col">
+        <div className="px-4 py-5 border-b border-surface-200">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-md bg-primary-600 flex items-center justify-center text-white text-xs font-bold">
               AV
@@ -137,11 +137,11 @@ const AdminLayout: React.FC = () => {
           ))}
         </nav>
 
-        <div className="p-3 border-t border-cream-200">
+        <div className="p-3 border-t border-surface-200">
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 min-h-[40px] px-3 py-2 rounded-md text-sm font-medium text-surface-600 hover:bg-cream-150 hover:text-red-600 transition-colors text-left"
+            className="w-full flex items-center gap-3 min-h-[40px] px-3 py-2 rounded-md text-sm font-medium text-surface-600 hover:bg-surface-50 hover:text-red-600 transition-colors text-left"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -152,10 +152,10 @@ const AdminLayout: React.FC = () => {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-10 bg-cream-50/95 backdrop-blur border-b border-cream-200 px-4 lg:px-6 py-3 flex items-center gap-4">
+        <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-surface-200 px-4 lg:px-6 py-3 flex items-center gap-4">
           <div className="flex-1 min-w-0 text-sm text-surface-500 truncate">
             <span className="text-surface-600">AgroVoice</span>
-            <span className="mx-2 text-cream-300">›</span>
+            <span className="mx-2 text-surface-300">›</span>
             <span className="text-surface-900">{crumb}</span>
           </div>
 
@@ -169,8 +169,8 @@ const AdminLayout: React.FC = () => {
             </Link>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0 pl-2 border-l border-cream-200">
-            <div className="w-8 h-8 rounded-full bg-cream-200 flex items-center justify-center text-xs font-semibold text-surface-700">
+          <div className="flex items-center gap-2.5 shrink-0 pl-2 border-l border-surface-200">
+            <div className="w-8 h-8 rounded-full bg-surface-100 flex items-center justify-center text-xs font-semibold text-surface-700">
               {userInitials(user?.name ?? 'AD')}
             </div>
             <div className="hidden md:block min-w-0">

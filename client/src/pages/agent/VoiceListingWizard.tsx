@@ -60,23 +60,13 @@ const LANGUAGE_LABELS: Record<string, string> = {
   ee: 'Ewe',
 };
 
-/** Map publish blockers to wizard phase for "Fix this". */
-const FIX_PHASE_MAP: Record<string, number> = {
-  crop: 3,
-  quantity: 3,
-  unit: 3,
-  pricePerUnit: 3,
-  price: 3,
-  availableDate: 3,
-  description: 3,
-  region: 3,
-  community: 3,
-  image: 4,
-  imageUrl: 4,
-  visionReview: 4,
-  vision: 4,
-  agentConfirmed: 4,
-};
+/** Map publish blocker messages to wizard phase for "Fix". */
+function blockerFixPhase(message: string): number {
+  const lower = message.toLowerCase();
+  if (/image|confirm|vision/.test(lower)) return 4;
+  if (/farmer|consent/.test(lower)) return 1;
+  return 3;
+}
 
 type PublishState = 'idle' | 'publishing' | 'success' | 'blocked' | 'failed';
 
@@ -90,6 +80,7 @@ const VoiceListingWizard: React.FC = () => {
   const [sessionStarting, setSessionStarting] = useState(false);
 
   const [transcript, setTranscript] = useState('');
+  const [originalTranscript, setOriginalTranscript] = useState<string | undefined>();
   const [transcriptStatus, setTranscriptStatus] = useState<TranscriptStatus>('idle');
   const [transcriptError, setTranscriptError] = useState<string | undefined>();
   const [retryPending, setRetryPending] = useState(false);
@@ -165,22 +156,34 @@ const VoiceListingWizard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [farmer, farmerId]);
 
-  const persistAcceptedAnswer = async (text: string, responseId: string) => {
+  const persistAcceptedAnswer = async (
+    text: string,
+    responseId: string,
+    localTranscript?: string
+  ) => {
     if (!sessionId) return;
     try {
       await voiceApi.editVoiceResponse(
         sessionId,
         COMBINED_VOICE.step,
         text,
-        responseId
+        responseId,
+        localTranscript
       );
     } catch {
       // continue locally
     }
   };
 
-  const finishVoiceAndContinue = async (text: string, responseId: string) => {
-    await persistAcceptedAnswer(text, responseId);
+  const finishVoiceAndContinue = async (
+    text: string,
+    responseId: string,
+    agentEdited = false,
+    localTranscript?: string
+  ) => {
+    if (agentEdited) {
+      await persistAcceptedAnswer(text, responseId, localTranscript);
+    }
     extractionStarted.current = false;
     setPhase(3);
   };
@@ -204,11 +207,13 @@ const VoiceListingWizard: React.FC = () => {
       }
 
       setTranscript(result.transcript);
+      setOriginalTranscript(result.originalTranscript);
       setTranscriptError(result.errorMessage);
       setTranscriptStatus(result.transcriptionFailed ? 'failed' : 'done');
     } catch {
       setLastResponseId(null);
       setTranscript('');
+      setOriginalTranscript(undefined);
       setTranscriptError(undefined);
       setTranscriptStatus('failed');
     }
@@ -221,6 +226,7 @@ const VoiceListingWizard: React.FC = () => {
     try {
       const result = await voiceApi.retryTranscription(lastResponseId);
       setTranscript(result.transcript);
+      setOriginalTranscript(result.originalTranscript);
       setTranscriptError(result.errorMessage);
 
       if (!result.transcriptionFailed && result.transcript.trim()) {
@@ -231,6 +237,7 @@ const VoiceListingWizard: React.FC = () => {
       setTranscriptStatus(result.transcriptionFailed ? 'failed' : 'done');
     } catch {
       setTranscriptStatus('failed');
+      setTranscriptError('Speech-to-text failed. Type what the farmer said in the box below.');
     } finally {
       setRetryPending(false);
     }
@@ -238,12 +245,13 @@ const VoiceListingWizard: React.FC = () => {
 
   const handleAcceptTranscript = async (editedTranscript: string) => {
     if (!lastResponseId) return;
-    await finishVoiceAndContinue(editedTranscript, lastResponseId);
+    await finishVoiceAndContinue(editedTranscript, lastResponseId, true, originalTranscript);
   };
 
   const resetVoiceRecording = () => {
     setShowRecorder(true);
     setTranscript('');
+    setOriginalTranscript(undefined);
     setTranscriptStatus('idle');
     setTranscriptError(undefined);
     setLastResponseId(null);
@@ -533,6 +541,7 @@ const VoiceListingWizard: React.FC = () => {
           {!showRecorder && (
             <TranscriptEditor
               transcript={transcript}
+              originalTranscript={originalTranscript}
               status={transcriptStatus}
               errorMessage={transcriptError}
               onAccept={handleAcceptTranscript}
@@ -630,7 +639,7 @@ const VoiceListingWizard: React.FC = () => {
 
       {/* Phase 5 — Publish + farmer confirmation */}
       {phase === 5 && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {confirmationComplete ? (
             <div className="card p-8 text-center space-y-4">
               <SuccessAlert>Listing is live — farmer confirmed!</SuccessAlert>
@@ -649,20 +658,31 @@ const VoiceListingWizard: React.FC = () => {
             </div>
           ) : (
             <>
-              <h1 className="text-xl font-bold">Preview & publish</h1>
+              <div>
+                <h1 className="text-2xl font-semibold text-surface-900 tracking-tight">
+                  Preview & publish
+                </h1>
+                <p className="text-sm text-surface-500 mt-2">
+                  Review how buyers will see this listing, then publish when everything is complete.
+                </p>
+              </div>
+
               <ListingPreview listing={previewListing} farmerDisplayName={farmer.fullName} />
 
               {publishState === 'blocked' && missingFields.length > 0 && (
                 <ErrorAlert>
-                  <p className="font-medium mb-2">Still needed before going live:</p>
+                  <p className="font-semibold text-red-900 mb-3">Still needed before going live</p>
                   <ul className="space-y-2">
                     {missingFields.map((field) => (
-                      <li key={field} className="flex items-center justify-between gap-2">
-                        <span className="text-sm">{field}</span>
+                      <li
+                        key={field}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-white px-4 py-3"
+                      >
+                        <span className="text-sm text-red-900">{field}</span>
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => setPhase(FIX_PHASE_MAP[field] ?? 3)}
+                          onClick={() => setPhase(blockerFixPhase(field))}
                         >
                           Fix
                         </Button>
@@ -681,19 +701,27 @@ const VoiceListingWizard: React.FC = () => {
               )}
 
               {publishState !== 'success' && (
-                <div className="flex flex-col gap-3">
-                  <Button size="lg" variant="secondary" onClick={() => setPhase(3)}>
-                    Edit details
-                  </Button>
+                <div className="card p-5 space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button size="lg" variant="secondary" className="sm:flex-1" onClick={() => setPhase(3)}>
+                      Edit details
+                    </Button>
+                    <Button
+                      size="lg"
+                      className="sm:flex-1"
+                      loading={publishState === 'publishing'}
+                      disabled={publishState === 'publishing' || !listing?._id}
+                      onClick={handlePublish}
+                    >
+                      Publish listing
+                    </Button>
+                  </div>
                   <Button
                     size="lg"
-                    loading={publishState === 'publishing'}
-                    disabled={publishState === 'publishing' || !listing?._id}
-                    onClick={handlePublish}
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => navigate('/agent/farmers')}
                   >
-                    Publish listing
-                  </Button>
-                  <Button size="lg" variant="secondary" onClick={() => navigate('/agent/farmers')}>
                     Save draft & exit
                   </Button>
                 </div>
@@ -701,7 +729,7 @@ const VoiceListingWizard: React.FC = () => {
 
               {publishState === 'success' && (
                 <div className="card p-6 space-y-4">
-                  <h2 className="font-semibold">Play confirmation to farmer</h2>
+                  <h2 className="font-semibold text-surface-900">Play confirmation to farmer</h2>
                   <p className="text-sm text-surface-600">
                     Optional: play the audio so the farmer hears their listing is live.
                   </p>

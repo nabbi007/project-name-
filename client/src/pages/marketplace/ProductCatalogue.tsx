@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { marketplaceApi, type ListingFilters } from '../../api/marketplace.api';
 import { ListingCard } from '../../components/marketplace/ListingCard';
+import { MarketplaceNav } from '../../components/marketplace/MarketplaceNav';
 import { SearchInput } from '../../components/shared/SearchInput';
 import { Button } from '../../components/shared/Button';
 import { Input } from '../../components/shared/Input';
@@ -12,7 +13,6 @@ import { CardSkeleton } from '../../components/shared/Skeleton';
 import { EmptyState } from '../../components/shared/EmptyState';
 import { ErrorAlert } from '../../components/shared/Alerts';
 import { Drawer } from '../../components/shared/Drawer';
-import { useAuthStore } from '../../store/authStore';
 
 const regions = [
   { value: '', label: 'All Regions' },
@@ -30,7 +30,6 @@ const regions = [
 
 const ProductCatalogue: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAuthenticated } = useAuthStore();
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
   // Read filters from URL
@@ -128,35 +127,7 @@ const ProductCatalogue: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-surface-50">
-      {/* ─── Navigation ──────────────────────────────────── */}
-      <nav className="bg-white border-b border-surface-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-                <span className="text-white text-sm font-bold">A</span>
-              </div>
-              <span className="text-lg font-bold text-surface-900">AgroVoice</span>
-            </Link>
-            <div className="flex items-center gap-3">
-              {isAuthenticated() ? (
-                <Link to="/buyer/orders">
-                  <Button variant="secondary" size="sm">My Orders</Button>
-                </Link>
-              ) : (
-                <>
-                  <Link to="/login">
-                    <Button variant="ghost" size="sm">Sign In</Button>
-                  </Link>
-                  <Link to="/register">
-                    <Button variant="primary" size="sm">Register</Button>
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+      <MarketplaceNav />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* ─── Header + Search ────────────────────────────── */}

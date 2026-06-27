@@ -110,7 +110,7 @@ function mapPublicListing(raw: RawPublicListing): Listing {
       : '',
     agent: '',
     crop: raw.cropCategory?.name ?? raw.title ?? '',
-    quantity: Number(raw.quantity ?? 0),
+    quantity: Number(raw.availableQuantity ?? raw.quantity ?? 0),
     unit: raw.unit ?? '',
     pricePerUnit: Number(raw.pricePerUnit ?? 0),
     availableDate: raw.availableDate ?? '',

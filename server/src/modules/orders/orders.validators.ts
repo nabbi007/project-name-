@@ -10,6 +10,8 @@ export const createOrderSchema = z.object({
     .enum(['CASH_ON_DELIVERY', 'PAY_ON_PICKUP', 'SIMULATED_MOMO'])
     .default('PAY_ON_PICKUP'),
   notes: z.string().trim().max(500).optional(),
+  contactName: z.string().trim().min(2).max(100).optional(),
+  contactPhone: z.string().trim().min(10).max(20).optional(),
 });
 
 export const listOrdersQuerySchema = z.object({

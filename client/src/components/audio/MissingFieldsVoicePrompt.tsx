@@ -35,6 +35,7 @@ export const MissingFieldsVoicePrompt: React.FC<MissingFieldsVoicePromptProps> =
   const [processing, setProcessing] = useState(false);
   const [supplementError, setSupplementError] = useState<string | null>(null);
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [lastOriginalTranscript, setLastOriginalTranscript] = useState<string | null>(null);
 
   const fieldLabels = fields.map((f) => FIELD_LABELS[f] ?? f.replace(/([A-Z])/g, ' $1').toLowerCase());
 
@@ -69,9 +70,11 @@ export const MissingFieldsVoicePrompt: React.FC<MissingFieldsVoicePromptProps> =
     setProcessing(true);
     setSupplementError(null);
     setLastTranscript(null);
+    setLastOriginalTranscript(null);
     try {
       const result = await listingsApi.supplementListingVoice(listingId, blob, language);
       setLastTranscript(result.transcript);
+      setLastOriginalTranscript(result.originalTranscript ?? null);
       onUpdated(result.listing, result.incompleteFields);
     } catch {
       setSupplementError('Could not read that recording. Try again or fill in the form below.');
@@ -135,7 +138,15 @@ export const MissingFieldsVoicePrompt: React.FC<MissingFieldsVoicePromptProps> =
 
       {lastTranscript && !supplementError && (
         <SuccessAlert>
-          Heard: &ldquo;{lastTranscript}&rdquo;
+          {lastOriginalTranscript ? (
+            <>
+              Original: &ldquo;{lastOriginalTranscript}&rdquo;
+              <br />
+              English: &ldquo;{lastTranscript}&rdquo;
+            </>
+          ) : (
+            <>Heard: &ldquo;{lastTranscript}&rdquo;</>
+          )}
         </SuccessAlert>
       )}
     </div>

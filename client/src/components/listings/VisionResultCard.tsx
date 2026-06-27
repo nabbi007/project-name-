@@ -3,6 +3,7 @@ import { Button, Spinner, TextArea } from '../shared';
 import { Badge } from '../shared/Badge';
 import type { VisionObservation, VisionStatus } from '../../api/listings.api';
 import { getListingImageUrl } from '../../api/listings.api';
+import { VisionDescription } from './VisionDescription';
 
 interface VisionResultCardProps {
   imageUrl?: string;
@@ -78,7 +79,7 @@ export const VisionResultCard: React.FC<VisionResultCardProps> = ({
       </div>
 
       {observation?.description && (
-        <p className="text-sm text-surface-700 leading-relaxed">{observation.description}</p>
+        <VisionDescription description={observation.description} />
       )}
 
       {observation?.flaggedIssues && observation.flaggedIssues.length > 0 && (

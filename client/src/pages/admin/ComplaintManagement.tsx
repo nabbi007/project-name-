@@ -45,7 +45,7 @@ const ComplaintCard: React.FC<{
       </Button>
 
       {expanded && complaint.order && (
-        <div className="bg-cream-150 rounded-lg p-3 text-sm space-y-1">
+        <div className="bg-surface-50 rounded-lg p-3 text-sm space-y-1 border border-surface-200">
           <p>
             <span className="font-medium">Order status:</span> {complaint.order.status ?? '—'}
           </p>
@@ -58,7 +58,7 @@ const ComplaintCard: React.FC<{
       )}
 
       {complaint.status !== 'RESOLVED' && (
-        <div className="space-y-2 pt-2 border-t border-cream-200">
+        <div className="space-y-2 pt-2 border-t border-surface-200">
           <TextArea
             label="Resolution notes"
             value={resolution}

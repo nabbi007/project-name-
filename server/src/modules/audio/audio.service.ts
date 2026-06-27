@@ -165,7 +165,8 @@ export async function generateFieldPrompt(
 
   const text = buildMissingFieldsPrompt(
     promptFields,
-    listing.farmer.fullName
+    listing.farmer.fullName,
+    listing.farmer.preferredLanguage ?? language
   );
 
   return generate({

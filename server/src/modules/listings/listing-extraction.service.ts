@@ -66,6 +66,9 @@ function buildPrompt(transcriptBlock: string): string {
     '  "expiryDate": string,      // ISO date YYYY-MM-DD when listing expires, or null',
     '  "description": string      // a short plain-text description',
     '}',
+    'The transcript may be in Twi, Ga, Ewe, or English (or a mix). Interpret farmer intent in context.',
+    'Map relative dates to ISO from today: "next week" = today + 7 days, "tomorrow" = today + 1 day.',
+    'For quantity, use the number of units for sale (e.g. "10 baskets" or Twi "ahodo 10" with baskets).',
     'If a field is unknown, use null. Do not invent values.',
     '',
     'Transcript:',
@@ -190,7 +193,6 @@ async function createDraftListing(
     unit: listing.unit,
     pricePerUnit: listing.pricePerUnit,
     availableDate: listing.availableDate,
-    cropCategoryId: listing.cropCategoryId,
   });
 
   return { listing, incompleteFields: filterVoicePromptFields(incompleteFromListing) };

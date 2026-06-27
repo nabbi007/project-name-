@@ -8,6 +8,7 @@ import {
   formatOrderDate,
   formatOrderPrice,
   getOrderBuyerName,
+  getOrderBuyerPhone,
   getOrderFarmerName,
   getOrderListingImage,
   getOrderListingName,
@@ -35,6 +36,7 @@ export const AgentOrderCard: React.FC<AgentOrderCardProps> = ({
   const status = getOrderStatusMeta(order.status);
   const nextStatuses = AGENT_NEXT_STATUSES[order.status] ?? [];
   const unit = typeof order.listing === 'object' ? order.listing.unit : '';
+  const buyerPhone = getOrderBuyerPhone(order);
 
   return (
     <article className="card overflow-hidden hover:border-surface-300 transition-colors">
@@ -61,6 +63,18 @@ export const AgentOrderCard: React.FC<AgentOrderCardProps> = ({
           <h3 className="font-semibold text-surface-900 capitalize truncate">{crop}</h3>
           <p className="text-sm text-surface-500 mt-0.5 truncate">
             {getOrderFarmerName(order)} · Buyer: {getOrderBuyerName(order)}
+            {buyerPhone && (
+              <>
+                {' · '}
+                <a
+                  href={`tel:${buyerPhone.replace(/\s/g, '')}`}
+                  className="text-primary-600 hover:text-primary-700 font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {buyerPhone}
+                </a>
+              </>
+            )}
           </p>
           <p className="text-xs text-surface-400 mt-1">{formatOrderDate(order.createdAt)}</p>
         </div>
@@ -77,6 +91,25 @@ export const AgentOrderCard: React.FC<AgentOrderCardProps> = ({
       {expanded && (
         <div className="px-4 sm:px-5 pb-5 pt-0 border-t border-surface-100 space-y-4">
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pt-4">
+            <div>
+              <dt className="text-surface-500">Buyer</dt>
+              <dd className="font-medium">{getOrderBuyerName(order)}</dd>
+            </div>
+            <div>
+              <dt className="text-surface-500">Buyer phone</dt>
+              <dd className="font-medium">
+                {buyerPhone ? (
+                  <a
+                    href={`tel:${buyerPhone.replace(/\s/g, '')}`}
+                    className="text-primary-600 hover:text-primary-700"
+                  >
+                    {buyerPhone}
+                  </a>
+                ) : (
+                  <span className="text-surface-400">Not provided</span>
+                )}
+              </dd>
+            </div>
             <div>
               <dt className="text-surface-500">Delivery</dt>
               <dd className="font-medium capitalize">{order.deliveryMethod?.toLowerCase()}</dd>

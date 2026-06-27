@@ -40,7 +40,7 @@ const AIRunRow: React.FC<{ run: AIRun }> = ({ run }) => {
   const truncated = errorMsg.length > 80;
 
   return (
-    <tr className="hover:bg-cream-150 transition-colors">
+    <tr className="hover:bg-surface-50 transition-colors">
       <td className="px-4 py-3 text-sm">{run.apiType}</td>
       <td className="px-4 py-3 text-sm">
         {run.relatedFarmerName ?? run.relatedListingTitle ?? '—'}
@@ -138,7 +138,7 @@ const AIMonitoring: React.FC = () => {
         <div className="card overflow-x-auto">
           <table className="w-full text-sm min-w-[720px]">
             <thead>
-              <tr className="border-b border-cream-200 text-left text-xs text-surface-500">
+              <tr className="border-b border-surface-200 text-left text-xs text-surface-500">
                 <th className="px-4 py-3 font-medium">API type</th>
                 <th className="px-4 py-3 font-medium">Related</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -147,7 +147,7 @@ const AIMonitoring: React.FC = () => {
                 <th className="px-4 py-3 font-medium">Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-cream-200">
+            <tbody className="divide-y divide-surface-200">
               {runs.map((run) => (
                 <AIRunRow key={run._id} run={run} />
               ))}

@@ -254,7 +254,6 @@ async function getPublicationBlockers(listingId: number): Promise<string[]> {
       pricePerUnit: true,
       availableDate: true,
       agentConfirmed: true,
-      cropCategoryId: true,
       farmer: { select: { status: true, consentConfirmedAt: true } },
       _count: { select: { images: true } },
     },
@@ -267,9 +266,6 @@ async function getPublicationBlockers(listingId: number): Promise<string[]> {
   }
   if (!listing.farmer.consentConfirmedAt) {
     blockers.push('Farmer consent must be recorded');
-  }
-  if (!listing.cropCategoryId) {
-    blockers.push('A valid crop category is required');
   }
   if (Number(listing.quantity) <= 0) {
     blockers.push('Quantity must be greater than zero');

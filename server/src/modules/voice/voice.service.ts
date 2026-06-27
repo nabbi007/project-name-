@@ -9,6 +9,10 @@ import {
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { transcribeAudioBuffer } from '../../services/snwolley/speech-to-text.service';
+import {
+  displayTranscript,
+  localizeTranscript,
+} from '../../services/snwolley/transcript-localization.service';
 import { fetchMedia } from '../../services/storage/storage.service';
 import {
   CreateResponseInput,
@@ -193,14 +197,14 @@ async function runTranscription(
     const buffer =
       source.kind === 'buffer' ? source.buffer : await fetchMedia(source.ref);
     const result = await transcribeAudioBuffer(buffer, filename, language ?? undefined);
-
-    let transcript = result.transcript;
+    const localized = await localizeTranscript(result.transcript, language);
+    const englishText = displayTranscript(localized);
 
     const updated = await prisma.voiceResponse.update({
       where: { id: responseId },
       data: {
-        transcript,
-        correctedTranscript: null,
+        transcript: localized.transcript,
+        correctedTranscript: localized.correctedTranscript,
         sttSessionId: result.sttSessionId,
         processingStatus: ProcessingStatus.COMPLETED,
         errorMessage: null,
@@ -213,11 +217,28 @@ async function runTranscription(
       data: {
         processingStatus: ProcessingStatus.COMPLETED,
         sessionId: result.sttSessionId,
-        responseContent: transcript.slice(0, 2000),
+        responseContent: englishText.slice(0, 2000),
         httpStatus: 200,
         completedAt: new Date(),
       },
     });
+
+    if (localized.translated) {
+      await prisma.aiProcessingRun.create({
+        data: {
+          processableType: 'VoiceResponse',
+          processableId: responseId,
+          apiType: 'AGENT_CHAT',
+          requestSummary: `Translate ${language ?? 'local'} → English`,
+          processingStatus: ProcessingStatus.COMPLETED,
+          attempts: 1,
+          responseContent: englishText.slice(0, 2000),
+          httpStatus: 200,
+          startedAt: new Date(),
+          completedAt: new Date(),
+        },
+      });
+    }
 
     return updated;
   } catch (error) {
@@ -284,9 +305,19 @@ export async function transcribeResponse(actor: Actor, responseUuid: string) {
   );
 }
 
+async function transcribeResponseOrFailed(actor: Actor, responseUuid: string) {
+  try {
+    return await transcribeResponse(actor, responseUuid);
+  } catch {
+    return prisma.voiceResponse.findFirstOrThrow({
+      where: { uuid: responseUuid },
+      select: responseSelect,
+    });
+  }
+}
+
 export async function retryTranscription(actor: Actor, responseUuid: string) {
-  // Same path as transcribe; attempts counter is incremented inside.
-  return transcribeResponse(actor, responseUuid);
+  return transcribeResponseOrFailed(actor, responseUuid);
 }
 
 export async function updateTranscript(

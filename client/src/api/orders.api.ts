@@ -51,6 +51,8 @@ export interface CreateOrderPayload {
   deliveryLocation?: string;
   paymentMethod: 'CASH_ON_DELIVERY' | 'PAY_ON_PICKUP' | 'SIMULATED_MOMO';
   notes?: string;
+  contactName?: string;
+  contactPhone?: string;
 }
 
 interface RawOrderItem {

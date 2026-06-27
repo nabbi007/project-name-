@@ -114,6 +114,16 @@ const TX_OPTIONS = { maxWait: 10000, timeout: 20000 } as const;
 
 export async function createOrder(actor: Actor, input: CreateOrderInput) {
   return prisma.$transaction(async (tx) => {
+    if (input.contactPhone || input.contactName) {
+      await tx.user.update({
+        where: { id: actor.id },
+        data: {
+          ...(input.contactPhone ? { phone: input.contactPhone } : {}),
+          ...(input.contactName ? { name: input.contactName } : {}),
+        },
+      });
+    }
+
     const listing = await tx.produceListing.findFirst({
       where: {
         uuid: input.listingId,

@@ -21,6 +21,13 @@ const STT_ENDPOINT = '/stt';
 const AUDIO_FIELD = 'audio';
 const DEFAULT_LANGUAGE = 'en';
 
+/** Alternate STT tags to try per farmer locale (Snwolley may accept tw or twi). */
+const STT_LANGUAGE_ATTEMPTS: Record<string, string[]> = {
+  tw: ['tw', 'twi', 'ak'],
+  ga: ['ga', 'gaa'],
+  ee: ['ee', 'ewe'],
+};
+
 /** Map farmer locale codes to STT language tags. */
 export function normalizeSttLanguage(language?: string): string {
   if (!language) return DEFAULT_LANGUAGE;
@@ -139,20 +146,28 @@ export async function transcribeAudioBuffer(
   }
 
   const primaryLang = normalizeSttLanguage(language);
+  const localAttempts =
+    primaryLang === DEFAULT_LANGUAGE
+      ? [DEFAULT_LANGUAGE]
+      : STT_LANGUAGE_ATTEMPTS[primaryLang] ?? [primaryLang];
+  // Snwolley often only accepts `en`. Try local tags first, then English as last resort
+  // so retry/upload does not hard-fail with 502 (agent can correct misheard text).
+  const attempts =
+    primaryLang === DEFAULT_LANGUAGE ? localAttempts : [...localAttempts, DEFAULT_LANGUAGE];
 
-  try {
-    return await callStt(buildSttForm(buffer, filename, primaryLang));
-  } catch (primaryError) {
-    if (primaryLang === DEFAULT_LANGUAGE) {
-      throw primaryError instanceof AppError ? primaryError : mapAxiosError(primaryError);
-    }
-    // Snwolley STT often only accepts `en` — retry before manual fallback.
+  let lastError: unknown;
+  for (const lang of attempts) {
     try {
-      return await callStt(buildSttForm(buffer, filename, DEFAULT_LANGUAGE));
-    } catch {
-      throw primaryError instanceof AppError ? primaryError : mapAxiosError(primaryError);
+      return await callStt(buildSttForm(buffer, filename, lang));
+    } catch (error) {
+      lastError = error;
     }
   }
+
+  if (lastError instanceof AppError) {
+    throw lastError;
+  }
+  throw mapAxiosError(lastError);
 }
 
 function mapAxiosError(error: unknown): AppError {

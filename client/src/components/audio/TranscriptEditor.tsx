@@ -7,6 +7,7 @@ export type TranscriptStatus = 'idle' | 'uploading' | 'transcribing' | 'done' | 
 
 interface TranscriptEditorProps {
   transcript: string;
+  originalTranscript?: string;
   status: TranscriptStatus;
   errorMessage?: string;
   onAccept: (editedTranscript: string) => void;
@@ -18,13 +19,14 @@ interface TranscriptEditorProps {
 const statusMessages: Record<TranscriptStatus, string> = {
   idle: '',
   uploading: 'Uploading recording…',
-  transcribing: 'Transcribing recording…',
+  transcribing: 'Transcribing and translating to English…',
   done: '',
-  failed: 'Could not transcribe — type what the farmer said, or try again.',
+  failed: 'Could not transcribe — type what the farmer said in English, or try again.',
 };
 
 export const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
   transcript,
+  originalTranscript,
   status,
   errorMessage,
   onAccept,
@@ -56,8 +58,15 @@ export const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
         </p>
       )}
 
+      {originalTranscript && (
+        <div className="rounded-lg border border-surface-200 bg-surface-50 p-4 space-y-1">
+          <p className="text-sm font-medium text-surface-700">Original (local language)</p>
+          <p className="text-base text-surface-800">{originalTranscript}</p>
+        </div>
+      )}
+
       <TextArea
-        label="What the farmer said"
+        label={originalTranscript ? 'English translation' : 'What the farmer said'}
         value={edited}
         onChange={(e) => setEdited(e.target.value)}
         rows={4}

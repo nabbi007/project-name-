@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { redirectAfterAuth, sanitizeRedirect } from '../../utils/authRedirect';
 import { authApi } from '../../api/auth.api';
 import { Input } from '../../components/shared/Input';
 import { Button } from '../../components/shared/Button';
@@ -18,6 +19,8 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
   const { login } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,21 +39,7 @@ const Login: React.FC = () => {
     try {
       const response = await authApi.login(formData);
       login(response.data.token, response.data.user);
-
-      // Role-based redirect
-      switch (response.data.user.role) {
-        case 'ADMIN':
-          navigate('/admin/dashboard', { replace: true });
-          break;
-        case 'FIELD_AGENT':
-          navigate('/agent/dashboard', { replace: true });
-          break;
-        case 'BUYER':
-          navigate('/marketplace', { replace: true });
-          break;
-        default:
-          navigate('/', { replace: true });
-      }
+      navigate(redirectAfterAuth(response.data.user.role, redirectParam), { replace: true });
     } catch (err: unknown) {
       const axiosError = err as {
         response?: { status?: number; data?: { message?: string; code?: string } };
@@ -110,7 +99,14 @@ const Login: React.FC = () => {
 
           <p className="text-center text-sm text-surface-500 mt-6">
             Don't have an account?{' '}
-            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
+            <Link
+              to={
+                sanitizeRedirect(redirectParam)
+                  ? `/register?redirect=${encodeURIComponent(sanitizeRedirect(redirectParam)!)}`
+                  : '/register'
+              }
+              className="text-primary-600 hover:text-primary-700 font-medium"
+            >
               Register as a buyer
             </Link>
           </p>

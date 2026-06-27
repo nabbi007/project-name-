@@ -2,6 +2,8 @@ import React from 'react';
 import { Badge } from '../shared/Badge';
 import type { Listing } from '../../api/listings.api';
 import { getListingImageUrl } from '../../api/listings.api';
+import { VisionDescription } from './VisionDescription';
+import { getListingStatusMeta } from '../../utils/listingDisplay';
 
 interface ListingPreviewProps {
   listing: Listing;
@@ -15,6 +17,7 @@ const cropGradients: Record<string, string> = {
   tomato: 'from-red-400 to-rose-500',
   plantain: 'from-green-400 to-emerald-500',
   yam: 'from-orange-400 to-amber-600',
+  yams: 'from-orange-400 to-amber-600',
   rice: 'from-lime-300 to-green-400',
   default: 'from-primary-400 to-primary-600',
 };
@@ -38,12 +41,13 @@ function formatPrice(price?: number): string {
   return `GH₵ ${price.toFixed(2)}`;
 }
 
-function statusLabel(status?: string): string {
-  if (status === 'PUBLISHED') return 'Live on marketplace';
-  if (status === 'DRAFT') return 'Draft';
-  if (status === 'PENDING_REVIEW') return 'Pending review';
-  if (status === 'REJECTED') return 'Rejected';
-  return status ?? 'Draft';
+function PreviewField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-surface-500 mb-1">{label}</p>
+      <p className="text-sm text-surface-900">{value}</p>
+    </div>
+  );
 }
 
 export const ListingPreview: React.FC<ListingPreviewProps> = ({
@@ -54,10 +58,11 @@ export const ListingPreview: React.FC<ListingPreviewProps> = ({
   const gradient = getCropGradient(listing.crop);
   const community = listing.community ?? '—';
   const name = farmerDisplayName ?? listing.farmerName ?? 'Farmer';
+  const status = getListingStatusMeta(listing.status);
 
   return (
-    <div className="card overflow-hidden max-w-md mx-auto">
-      <div className="relative h-48 overflow-hidden">
+    <div className="card overflow-hidden w-full">
+      <div className="relative h-52 sm:h-56 overflow-hidden bg-surface-100">
         {imageUrl ? (
           <img src={imageUrl} alt={listing.crop ?? 'Crop'} className="w-full h-full object-cover" />
         ) : (
@@ -67,61 +72,63 @@ export const ListingPreview: React.FC<ListingPreviewProps> = ({
             <span className="text-5xl">🌾</span>
           </div>
         )}
-        {listing.visionObservation?.status === 'COMPLETED' && (
-          <div className="absolute top-2 right-2">
+        <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+          <Badge color={status.color}>{status.label}</Badge>
+          {listing.visionObservation?.status === 'COMPLETED' && (
             <Badge color="green">Vision reviewed</Badge>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      <div className="p-5 space-y-3">
+      <div className="p-5 lg:p-6 space-y-5">
         <div>
-          <h3 className="text-xl font-bold text-surface-900 capitalize">{listing.crop ?? 'Untitled'}</h3>
-          <p className="text-sm text-surface-500 mt-0.5">
+          <h3 className="text-xl font-semibold text-surface-900 capitalize">
+            {listing.crop ?? 'Untitled listing'}
+          </h3>
+          <p className="text-sm text-surface-500 mt-1">
             {name} · {community}
           </p>
         </div>
 
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-primary-700">
+          <span className="text-2xl font-bold text-primary-700 tabular-nums">
             {formatPrice(listing.pricePerUnit)}
           </span>
           {listing.unit && <span className="text-sm text-surface-500">/ {listing.unit}</span>}
         </div>
 
-        <p className="text-sm text-surface-600">
-          {listing.quantity ?? '—'} {listing.unit ?? ''} available
-        </p>
-
-        <div className="text-sm text-surface-600 space-y-1">
-          <p>
-            <span className="font-medium text-surface-700">Available from:</span>{' '}
-            {formatDate(listing.availableDate)}
-          </p>
-          {listing.expiryDate && (
-            <p>
-              <span className="font-medium text-surface-700">Expires:</span>{' '}
-              {formatDate(listing.expiryDate)}
-            </p>
-          )}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1 border-t border-surface-200">
+          <PreviewField
+            label="Quantity"
+            value={`${listing.quantity ?? '—'} ${listing.unit ?? ''}`.trim()}
+          />
+          <PreviewField label="Available from" value={formatDate(listing.availableDate)} />
+          <PreviewField
+            label="Expires"
+            value={listing.expiryDate ? formatDate(listing.expiryDate) : '—'}
+          />
         </div>
 
         {listing.description && (
-          <p className="text-sm text-surface-600 border-t border-surface-100 pt-3">
-            {listing.description}
-          </p>
-        )}
-
-        {listing.visionObservation?.description && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-            <p className="text-sm font-bold text-amber-900">
-              AI visual observation. Human confirmation is required.
-            </p>
-            <p className="text-sm text-surface-700">{listing.visionObservation.description}</p>
+          <div>
+            <p className="field-label">Description</p>
+            <div className="field-value items-start whitespace-pre-wrap leading-relaxed">
+              {listing.description}
+            </div>
           </div>
         )}
 
-        <Badge color="gray">{statusLabel(listing.status)}</Badge>
+        {listing.visionObservation?.description && (
+          <div>
+            <p className="field-label">AI visual observation</p>
+            <div className="field-value items-start">
+              <p className="text-xs text-surface-500 mb-3">
+                Human confirmation is required before publish.
+              </p>
+              <VisionDescription description={listing.visionObservation.description} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

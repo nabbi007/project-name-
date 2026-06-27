@@ -12,7 +12,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={textareaId} className="block text-sm font-medium text-surface-700 mb-1.5">
+          <label htmlFor={textareaId} className="field-label">
             {label}
           </label>
         )}

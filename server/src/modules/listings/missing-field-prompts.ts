@@ -1,5 +1,5 @@
-/** Spoken prompts (English — Snwolley hackathon TTS) for missing listing fields. */
-const FIELD_PROMPTS: Record<string, string> = {
+/** Spoken prompts for missing listing fields (English + Twi). */
+const FIELD_PROMPTS_EN: Record<string, string> = {
   crop: 'what crop you are selling',
   cropCategory: 'what crop you are selling',
   quantity: 'how much you have',
@@ -12,17 +12,48 @@ const FIELD_PROMPTS: Record<string, string> = {
   description: 'any other details about your produce',
 };
 
+const FIELD_PROMPTS_TW: Record<string, string> = {
+  crop: 'dua a wode reto no',
+  cropCategory: 'dua a wode reto no',
+  quantity: 'susu a wuwɔ',
+  unit: 'nkyekyɛmu a wode bo no, sɛ bag anaa kilo a',
+  pricePerUnit: 'bo a ɛwɔ Ghana sidi mu basket biara anaa unit biara',
+  price: 'bo a ɛwɔ Ghana sidi mu basket biara anaa unit biara',
+  availableDate: 'da a aduan no bɛyɛ adan ama atɔfo',
+  expiryDate: 'nna ahe a wobɛtɔ aduan no',
+  expiresAt: 'nna ahe a wobɛtɔ aduan no',
+  description: 'nsɛm foforo a ɛfa aduan no ho',
+};
+
+function normalizePromptLanguage(language?: string | null): 'en' | 'tw' {
+  const code = (language ?? 'en').trim().toLowerCase();
+  if (code === 'tw' || code === 'twi') return 'tw';
+  return 'en';
+}
+
 export function buildMissingFieldsPrompt(
   fields: string[],
-  farmerName?: string | null
+  farmerName?: string | null,
+  language?: string | null
 ): string {
+  const lang = normalizePromptLanguage(language);
+  const prompts = lang === 'tw' ? FIELD_PROMPTS_TW : FIELD_PROMPTS_EN;
   const unique = [...new Set(fields.map((f) => (f === 'price' ? 'pricePerUnit' : f)))];
-  const parts = unique
-    .map((f) => FIELD_PROMPTS[f])
-    .filter(Boolean);
+  const parts = unique.map((f) => prompts[f]).filter(Boolean);
 
   if (parts.length === 0) {
-    return 'Please tell us more about your produce listing.';
+    return lang === 'tw'
+      ? 'Mesrɛ, ka bio fa wo aduan a wode rebɛtɔ no ho.'
+      : 'Please tell us more about your produce listing.';
+  }
+
+  if (lang === 'tw') {
+    const greeting = farmerName ? `${farmerName}, ` : '';
+    const need =
+      parts.length === 1
+        ? parts[0]
+        : `${parts.slice(0, -1).join(', ')} ne ${parts[parts.length - 1]}`;
+    return `${greeting}yɛsrɛ sɛ ka ${need}. Ka seisei ara.`;
   }
 
   const greeting = farmerName ? `Hello ${farmerName}. ` : '';
@@ -55,16 +86,13 @@ export function listingIncompleteFields(listing: {
   unit?: string | null;
   pricePerUnit?: unknown;
   availableDate?: Date | null;
-  cropCategoryId?: number | null;
-  cropCategory?: { uuid?: string } | null;
 }): string[] {
   const fields: string[] = [];
   const title = (listing.title ?? '').trim();
   const looksLikeTitle =
     title && !/^\d/.test(title) && title.split(/\s+/).length <= 4 && !/pricing/i.test(title);
-  const hasCategory = Boolean(listing.cropCategoryId ?? listing.cropCategory?.uuid);
 
-  if (!hasCategory && !looksLikeTitle) fields.push('crop');
+  if (!looksLikeTitle) fields.push('crop');
   const qty = Number(listing.quantity);
   if (!Number.isFinite(qty) || qty <= 0) fields.push('quantity');
   if (!listing.unit) fields.push('unit');

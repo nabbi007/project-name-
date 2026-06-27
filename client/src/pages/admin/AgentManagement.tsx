@@ -80,7 +80,7 @@ const AgentManagement: React.FC = () => {
           <div className="hidden md:block card overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-cream-200 text-left text-xs text-surface-500">
+                <tr className="border-b border-surface-200 text-left text-xs text-surface-500">
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Phone</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -88,9 +88,9 @@ const AgentManagement: React.FC = () => {
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-cream-200">
+              <tbody className="divide-y divide-surface-200">
                 {agents.map((agent) => (
-                  <tr key={agent._id} className="hover:bg-cream-150 transition-colors">
+                  <tr key={agent._id} className="hover:bg-surface-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-surface-900">{agent.name}</td>
                     <td className="px-4 py-3 text-surface-600">{agent.phone ?? '—'}</td>
                     <td className="px-4 py-3">

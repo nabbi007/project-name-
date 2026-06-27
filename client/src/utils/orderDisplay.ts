@@ -61,6 +61,13 @@ export function getOrderBuyerName(order: Order): string {
   return 'Buyer';
 }
 
+export function getOrderBuyerPhone(order: Order): string | undefined {
+  if (typeof order.buyer === 'object' && order.buyer.phone?.trim()) {
+    return order.buyer.phone.trim();
+  }
+  return undefined;
+}
+
 export function formatOrderDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GH', {
     day: 'numeric',

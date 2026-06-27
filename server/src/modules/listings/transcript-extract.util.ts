@@ -91,12 +91,41 @@ export function extractFromTranscriptLocally(transcriptBlock: string): {
     }
   }
 
+  if (!quantity) {
+    const twiCount = text.match(/\bahodo\s+(\d+(?:\.\d+)?)\b/i);
+    if (twiCount) quantity = Number(twiCount[1]);
+  }
+
+  if (!quantity) {
+    const typedCount = text.match(/\b(\d+(?:\.\d+)?)\s*(?:varieties|types|kinds|pieces|units)\b/i);
+    if (typedCount) quantity = Number(typedCount[1]);
+  }
+
+  if (!quantity) {
+    const cropCount = text.match(
+      /\b(?:tomato(?:es)?|maize|yam|yams|pepper(?:s)?|cassava|plantain(?:s)?|onion(?:s)?)[^,.]{0,40}?\b(\d+(?:\.\d+)?)\b/i
+    );
+    if (cropCount) quantity = Number(cropCount[1]);
+  }
+
+  if (!unit) {
+    const unitMention = text.match(
+      /\b(basket|baskets|bag|bags|sack|sacks|crate|crates|box|boxes|kilo|kilos|kg)\b/i
+    );
+    if (unitMention) unit = unitFromWord(unitMention[1]);
+  }
+
   let pricePerUnit: number | null = null;
   const priceMatch =
     text.match(/(\d+(?:\.\d+)?)\s*(?:cedis|ghs|₵)/i) ??
-    text.match(/(?:price|costs?|at|for)\s*(?:is\s*)?(?:₵|ghs)?\s*(\d+(?:\.\d+)?)/i);
+    text.match(/(?:₵|ghs|GH₵)\s*(\d+(?:\.\d+)?)/i) ??
+    text.match(/(\d+(?:\.\d+)?)\s*(?:per|each|biara)\s*(?:basket|bag|sack|crate|box|kilo|kg|unit)/i) ??
+    text.match(/(?:price|costs?|at|for|biara|bo)\s*(?:is\s*)?(?:₵|ghs|GH₵)?\s*(\d+(?:\.\d+)?)/i);
   if (priceMatch) {
     pricePerUnit = Number(priceMatch[1]);
+  } else if (/price|cedis|₵|ghs|sidi|biara/i.test(text)) {
+    const lone = text.match(/\b(\d{2,4}(?:\.\d+)?)\b/);
+    if (lone) pricePerUnit = Number(lone[1]);
   }
 
   if (!crop) {
@@ -114,26 +143,37 @@ export function extractFromTranscriptLocally(transcriptBlock: string): {
   }
 
   let availableDate: string | null = null;
-  if (/\btomorrow\b/i.test(text) && !/expir/i.test(text)) {
+  const addDays = (days: number): string => {
     const d = new Date();
-    d.setDate(d.getDate() + 1);
-    availableDate = d.toISOString().slice(0, 10);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  if (/\btomorrow\b/i.test(text) && !/expir/i.test(text)) {
+    availableDate = addDays(1);
   } else if (/\b(today|now)\b/i.test(text) && !/expir/i.test(text)) {
-    availableDate = new Date().toISOString().slice(0, 10);
+    availableDate = addDays(0);
+  } else if (/\b(?:ready\s+)?next\s+week\b/i.test(text) && !/expir/i.test(text)) {
+    availableDate = addDays(7);
+  } else if (/\b(?:ready\s+)?next\s+month\b/i.test(text) && !/expir/i.test(text)) {
+    availableDate = addDays(30);
   } else {
     const readyIn = text.match(
-      /\b(?:ready|available)\s+(?:in|on|from)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?(day|days|week|weeks|month|months)\b/i
+      /\b(?:ready|available)\s+(?:in|on|from)?\s*(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+)?(day|days|week|weeks|month|months)\b/i
     );
     if (readyIn) {
-      const count = Number(readyIn[1]) || 1;
+      const wordToNum: Record<string, number> = {
+        one: 1, two: 2, three: 3, four: 4, five: 5,
+        six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+      };
+      const raw = readyIn[1]?.toLowerCase();
+      const count = raw ? (wordToNum[raw] ?? Number(raw)) || 1 : 1;
       const days = readyIn[2].toLowerCase().startsWith('week')
         ? count * 7
         : readyIn[2].toLowerCase().startsWith('month')
           ? count * 30
           : count;
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      availableDate = d.toISOString().slice(0, 10);
+      availableDate = addDays(days);
     } else {
       const iso = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
       if (iso) availableDate = iso[1];
