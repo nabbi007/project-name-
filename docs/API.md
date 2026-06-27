@@ -2,7 +2,7 @@
 
 This document is the contract between the AgroVoice **backend** (`server/`) and the **React frontend** (`client/`). It describes every endpoint currently implemented, the response envelope, authentication, roles, enums, file uploads, and the AI-failure fallbacks.
 
-> Status: Phases 1–10 implemented (auth, farmers, voice/STT, listing extraction, vision, listing management/publication, TTS notifications, public marketplace, orders/inventory). Phase 11 (administration) is in progress.
+> Status: All core phases (1–11) implemented — auth, farmers, voice/STT, listing extraction, vision, listing management/publication, TTS notifications, public marketplace, orders/inventory, and administration.
 
 ---
 
@@ -244,6 +244,21 @@ Generates spoken (WAV) notifications for farmers via Snwolley TTS.
 - `processingStatus`: `PENDING | PROCESSING | COMPLETED | FAILED`. The WAV is at `audioPath` (e.g. `uploads/generated-audio/<id>.wav`) — serve from `http://localhost:5000/<audioPath>`.
 - Buyers cannot access generated audio (farmer-facing). TTS failures return handled `TTS_*` codes, never a 500.
 
+### 3.13 Administration (auth + ADMIN)
+
+| Method | Path | Body / Query | Returns |
+| --- | --- | --- | --- |
+| POST | `/admin/agents` | `{ name, email, password, phone? }` | `{ agent }` (creates FIELD_AGENT) |
+| GET | `/admin/stats` | — | dashboard aggregates |
+| GET | `/admin/users` | `?role=&status=&search=&page=&limit=` | paginated users |
+| PATCH | `/admin/users/:userId/status` | `{ status: ACTIVE\|SUSPENDED }` | `{ user }` |
+| GET | `/admin/ai-runs` | `?apiType=&processingStatus=&page=&limit=` | paginated AI processing logs |
+| PATCH | `/admin/listings/:listingId/moderate` | `{ decision: APPROVE\|REJECT, reason? }` | `{ listing }` |
+
+- `/admin/stats` returns `{ users:{ total, byRole }, farmers:{ total, byStatus }, listings:{ total, byStatus }, orders:{ total, byStatus, completedRevenue }, ai:{ total, byStatus } }`.
+- Admins cannot change their own status (400 `SELF_STATUS_CHANGE`). Suspended users cannot log in.
+- Moderation: `REJECT` → `REJECTED`; `APPROVE` → `PUBLISHED` (admin override). `apiType`: `SPEECH_TO_TEXT | AGENT_CHAT | VISION | TEXT_TO_SPEECH`.
+
 ---
 
 ## 4. File uploads (multipart)
@@ -277,7 +292,7 @@ The current client stubs assume a different (Mongo-style) contract. Please recon
 | Pagination `data.{listings,page,total}` | `data: []` + `pagination: { page, limit, total, totalPages }` | Read `pagination` |
 | Orders status `PLACED/REJECTED`, `totalPrice`, `farmerConfirmed` | Backend statuses `PENDING/CONFIRMED/…` (no PLACED/REJECTED), `totalAmount`, `statusHistory[]` (see §3.11). `paymentMethod` SIMULATED_MOMO is accepted | Map status names + `totalAmount`; treat cancel as PATCH `/orders/:id/cancel` |
 
-When Phases 9–11 are implemented this guide will be extended with the marketplace, orders, and admin contracts.
+All phases (marketplace §3.10, orders §3.11, audio §3.12, admin §3.13) are now documented above.
 
 ---
 
