@@ -8,6 +8,7 @@ import {
 import {
   Actor,
   generateForListing,
+  generateFieldPrompt,
   generateForOrder,
   getAudio,
   markPlayed,
@@ -24,9 +25,16 @@ const param = (req: Request, key: string): string => String(req.params[key]);
 // POST /api/listings/:listingId/audio
 export async function generateListing(req: Request, res: Response): Promise<void> {
   const actor = getActor(req);
-  const { language } = generateListingAudioSchema.parse(req.body ?? {});
-  const audio = await generateForListing(actor, param(req, 'listingId'), language);
-  sendCreated(res, { audio }, 'Listing notification audio generated');
+  const { language, fields } = generateListingAudioSchema.parse(req.body ?? {});
+  const audio =
+    fields && fields.length > 0
+      ? await generateFieldPrompt(actor, param(req, 'listingId'), fields, language)
+      : await generateForListing(actor, param(req, 'listingId'), language);
+  sendCreated(
+    res,
+    { audio },
+    fields?.length ? 'Missing-field prompt audio generated' : 'Listing notification audio generated'
+  );
 }
 
 // POST /api/orders/:orderId/audio

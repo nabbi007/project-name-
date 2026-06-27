@@ -1,5 +1,21 @@
 import apiClient from './api-client';
 import { resolveMediaUrl } from './media';
+import { blobToWav } from '../utils/audioToWav';
+
+const PUBLISH_VOICE_FIELDS = new Set([
+  'crop',
+  'quantity',
+  'unit',
+  'pricePerUnit',
+  'availableDate',
+]);
+
+/** Fields that can be collected with TTS + follow-up recording. */
+export function filterVoiceGapFields(fields: string[]): string[] {
+  return [...new Set(fields.map((f) => (f === 'price' ? 'pricePerUnit' : f)))].filter((f) =>
+    PUBLISH_VOICE_FIELDS.has(f)
+  );
+}
 
 export type VisionStatus =
   | 'ANALYZING'
@@ -259,12 +275,17 @@ async function resolvePrimaryImageId(listingId: string): Promise<string | undefi
 }
 
 export const listingsApi = {
-  extractListing: async (voiceSessionId: string): Promise<Listing> => {
+  extractListing: async (
+    voiceSessionId: string
+  ): Promise<{ listing: Listing; incompleteFields: string[] }> => {
     const { data } = await apiClient.post<{
       success: boolean;
       data: { listing: RawListing; incompleteFields?: string[] };
     }>(`/voice-sessions/${voiceSessionId}/extract-listing`);
-    return mapListing(data.data.listing);
+    return {
+      listing: mapListing(data.data.listing),
+      incompleteFields: filterVoiceGapFields(data.data.incompleteFields ?? []),
+    };
   },
 
   updateListing: async (id: string, payload: ListingFormPayload): Promise<Listing> => {
@@ -356,6 +377,51 @@ export const listingsApi = {
       };
     }>(`/listings/${id}/audio`, {});
     return mapAudio(data.data.audio);
+  },
+
+  generateMissingFieldsAudio: async (
+    id: string,
+    fields: string[],
+    language?: string
+  ): Promise<GeneratedAudio> => {
+    const { data } = await apiClient.post<{
+      success: boolean;
+      data: {
+        audio: {
+          uuid?: string;
+          audioPath?: string;
+          textContent?: string;
+          processingStatus?: string;
+        };
+      };
+    }>(`/listings/${id}/audio`, { fields, language });
+    return mapAudio(data.data.audio);
+  },
+
+  supplementListingVoice: async (
+    id: string,
+    audioBlob: Blob,
+    language?: string
+  ): Promise<{ listing: Listing; incompleteFields: string[]; transcript: string }> => {
+    const wav = await blobToWav(audioBlob);
+    const form = new FormData();
+    form.append('audio', wav, 'supplement.wav');
+    if (language) form.append('language', language);
+
+    const { data } = await apiClient.post<{
+      success: boolean;
+      data: {
+        listing: RawListing;
+        incompleteFields?: string[];
+        transcript?: string;
+      };
+    }>(`/listings/${id}/supplement-voice`, form);
+
+    return {
+      listing: mapListing(data.data.listing),
+      incompleteFields: filterVoiceGapFields(data.data.incompleteFields ?? []),
+      transcript: data.data.transcript ?? '',
+    };
   },
 
   ackConfirmationAudio: async (audioId: string, _payload?: { farmerHeard?: boolean; farmerConfirmed?: boolean }): Promise<void> => {

@@ -15,6 +15,9 @@ import {
   unpublishListing,
   updateListing,
 } from './listings.service';
+import { supplementListingFromVoice } from './listing-supplement.service';
+import { supplementVoiceSchema } from '../audio/audio.validators';
+import { audioExtension } from '../../middleware/upload.middleware';
 
 function getActor(req: Request): Actor {
   if (!req.user) {
@@ -81,4 +84,29 @@ export async function unpublish(req: Request, res: Response): Promise<void> {
   const actor = getActor(req);
   const listing = await unpublishListing(actor, param(req, 'listingId'));
   sendSuccess(res, { listing }, 'Listing unpublished');
+}
+
+// POST /api/listings/:listingId/supplement-voice  (multipart: audio + language?)
+export async function supplementVoice(req: Request, res: Response): Promise<void> {
+  const actor = getActor(req);
+  const input = supplementVoiceSchema.parse(req.body ?? {});
+
+  if (!req.file) {
+    throw AppError.badRequest('An audio recording is required', 'NO_AUDIO');
+  }
+
+  const ext = audioExtension(req.file.mimetype);
+  const filename = req.file.originalname?.endsWith(ext)
+    ? req.file.originalname
+    : `supplement${ext}`;
+
+  const result = await supplementListingFromVoice(
+    actor,
+    param(req, 'listingId'),
+    req.file.buffer,
+    filename,
+    input.language
+  );
+
+  sendSuccess(res, result, 'Listing updated from voice recording');
 }

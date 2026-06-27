@@ -4,6 +4,7 @@ import { AppError } from '../../utils/AppError';
 import { synthesizeSpeech } from '../../services/snwolley/text-to-speech.service';
 import { uploadMedia } from '../../services/storage/storage.service';
 import { buildMessage } from './notification-messages';
+import { buildMissingFieldsPrompt, filterVoicePromptFields } from '../listings/missing-field-prompts';
 
 export interface Actor {
   id: number;
@@ -134,6 +135,43 @@ export async function generateForListing(
     farmerId: listing.farmerId,
     produceListingId: listing.id,
     messageType: AudioMessageType.LISTING_PUBLISHED,
+    text,
+  });
+}
+
+export async function generateFieldPrompt(
+  actor: Actor,
+  listingUuid: string,
+  fields: string[],
+  language = 'en'
+) {
+  const promptFields = filterVoicePromptFields(fields);
+  if (promptFields.length === 0) {
+    throw AppError.badRequest('No missing fields to prompt for', 'NO_MISSING_FIELDS');
+  }
+
+  const listing = await prisma.produceListing.findFirst({
+    where: {
+      uuid: listingUuid,
+      ...(actor.role === UserRole.ADMIN ? {} : { fieldAgentId: actor.id }),
+    },
+    select: {
+      id: true,
+      farmerId: true,
+      farmer: { select: { fullName: true, preferredLanguage: true } },
+    },
+  });
+  if (!listing) throw AppError.notFound('Listing not found');
+
+  const text = buildMissingFieldsPrompt(
+    promptFields,
+    listing.farmer.fullName
+  );
+
+  return generate({
+    farmerId: listing.farmerId,
+    produceListingId: listing.id,
+    messageType: AudioMessageType.LISTING_FIELD_PROMPT,
     text,
   });
 }

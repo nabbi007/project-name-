@@ -3,7 +3,10 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { uniqueSlug } from '../../utils/slug';
 import { chatWithAgent } from '../../services/snwolley/agent-chat.service';
+import { env } from '../../config/environment';
 import { normaliseUnit } from './listing.constants';
+import { extractFromTranscriptLocally } from './transcript-extract.util';
+import { filterVoicePromptFields, listingIncompleteFields } from './missing-field-prompts';
 
 export interface Actor {
   id: number;
@@ -16,6 +19,7 @@ export interface ExtractedListing {
   unit: string | null;
   pricePerUnit: number | null;
   availableDate: string | null;
+  expiryDate: string | null;
   description: string | null;
 }
 
@@ -59,6 +63,7 @@ function buildPrompt(transcriptBlock: string): string {
     '  "unit": string,            // unit of sale, e.g. "BASKET", "BAG", "KG"',
     '  "pricePerUnit": number,    // price per unit in Ghana cedis, e.g. 180',
     '  "availableDate": string,   // ISO date YYYY-MM-DD when produce is available',
+    '  "expiryDate": string,      // ISO date YYYY-MM-DD when listing expires, or null',
     '  "description": string      // a short plain-text description',
     '}',
     'If a field is unknown, use null. Do not invent values.',
@@ -97,6 +102,7 @@ export function parseExtraction(
   const unit = normaliseUnit(parsed.unit);
   const pricePerUnit = toNumber(parsed.pricePerUnit);
   const availableDate = toIsoDate(parsed.availableDate);
+  const expiryDate = toIsoDate(parsed.expiryDate);
   const description =
     typeof parsed.description === 'string' && parsed.description.trim()
       ? parsed.description.trim()
@@ -110,10 +116,84 @@ export function parseExtraction(
   if (!availableDate) incompleteFields.push('availableDate');
   if (!description) incompleteFields.push('description');
 
-  return {
-    extracted: { crop, quantity, unit, pricePerUnit, availableDate, description },
-    incompleteFields,
-  };
+  return { extracted: { crop, quantity, unit, pricePerUnit, availableDate, expiryDate, description }, incompleteFields };
+}
+
+function isAgentConfigured(): boolean {
+  return Boolean(env.SNWOLLEY_AGENT_API_KEY?.trim() && env.SNWOLLEY_AGENT_ID?.trim());
+}
+
+async function createDraftListing(
+  session: {
+    id: number;
+    farmerId: number;
+    fieldAgentId: number;
+  },
+  extracted: ExtractedListing,
+  _incompleteFields: string[]
+) {
+  const { crop, quantity, unit, pricePerUnit, availableDate, expiryDate, description } = extracted;
+
+  let cropCategoryId: number | null = null;
+  if (crop) {
+    const category = await prisma.cropCategory.findFirst({
+      where: {
+        OR: [
+          { name: { equals: crop, mode: 'insensitive' } },
+          { slug: { equals: crop.toLowerCase(), mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+    });
+    cropCategoryId = category?.id ?? null;
+  }
+
+  const titleBits = [quantity ?? '', unit ?? '', crop ?? 'Produce'].filter(Boolean);
+  const title = titleBits.join(' ').trim() || 'Draft listing';
+
+  const listing = await prisma.produceListing.create({
+    data: {
+      farmerId: session.farmerId,
+      fieldAgentId: session.fieldAgentId,
+      voiceSessionId: session.id,
+      cropCategoryId,
+      title,
+      slug: uniqueSlug(crop ?? 'listing'),
+      description,
+      quantity: quantity ?? 0,
+      availableQuantity: quantity ?? 0,
+      unit,
+      pricePerUnit: pricePerUnit ?? 0,
+      availableDate: availableDate ? new Date(availableDate) : null,
+      expiresAt: expiryDate ? new Date(expiryDate) : null,
+      status: ListingStatus.DRAFT,
+    },
+    select: {
+      uuid: true,
+      title: true,
+      slug: true,
+      description: true,
+      quantity: true,
+      unit: true,
+      pricePerUnit: true,
+      availableDate: true,
+      expiresAt: true,
+      cropCategoryId: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+
+  const incompleteFromListing = listingIncompleteFields({
+    title: listing.title,
+    quantity: listing.quantity,
+    unit: listing.unit,
+    pricePerUnit: listing.pricePerUnit,
+    availableDate: listing.availableDate,
+    cropCategoryId: listing.cropCategoryId,
+  });
+
+  return { listing, incompleteFields: filterVoicePromptFields(incompleteFromListing) };
 }
 
 export async function extractListing(actor: Actor, sessionUuid: string) {
@@ -157,132 +237,71 @@ export async function extractListing(actor: Actor, sessionUuid: string) {
   const transcriptBlock = parts.join('\n');
   const prompt = buildPrompt(transcriptBlock);
 
-  const run = await prisma.aiProcessingRun.create({
-    data: {
-      processableType: 'VoiceSession',
-      processableId: session.id,
-      apiType: 'AGENT_CHAT',
-      requestSummary: 'Listing extraction',
-      processingStatus: 'PROCESSING',
-      attempts: 1,
-      startedAt: new Date(),
-    },
-    select: { id: true },
-  });
+  let parsedResult: { extracted: ExtractedListing; incompleteFields: string[] } | null = null;
+  let chatId: string | null = null;
 
-  let agentResult;
-  try {
-    agentResult = await chatWithAgent(prompt);
-  } catch (error) {
-    const appErr =
-      error instanceof AppError
-        ? error
-        : new AppError('Listing extraction failed', 502, 'AGENT_UNAVAILABLE');
-    await prisma.aiProcessingRun.update({
-      where: { id: run.id },
+  if (isAgentConfigured()) {
+    const run = await prisma.aiProcessingRun.create({
       data: {
-        processingStatus: 'FAILED',
-        httpStatus: appErr.statusCode,
-        errorMessage: appErr.message,
-        completedAt: new Date(),
-      },
-    });
-    throw appErr;
-  }
-
-  const parsedResult = parseExtraction(agentResult.content);
-  if (!parsedResult) {
-    await prisma.aiProcessingRun.update({
-      where: { id: run.id },
-      data: {
-        processingStatus: 'FAILED',
-        sessionId: agentResult.chatId,
-        responseContent: agentResult.content.slice(0, 2000),
-        errorMessage: 'Agent response was not valid JSON',
-        completedAt: new Date(),
-      },
-    });
-    throw new AppError(
-      'Could not parse the AI response. Please complete the listing manually.',
-      422,
-      'AGENT_INVALID_JSON'
-    );
-  }
-
-  const { crop, quantity, unit, pricePerUnit, availableDate, description } =
-    parsedResult.extracted;
-  const incompleteFields = [...parsedResult.incompleteFields];
-
-  // Map crop to a crop category if one exists.
-  let cropCategoryId: number | null = null;
-  if (crop) {
-    const category = await prisma.cropCategory.findFirst({
-      where: {
-        OR: [
-          { name: { equals: crop, mode: 'insensitive' } },
-          { slug: { equals: crop.toLowerCase(), mode: 'insensitive' } },
-        ],
+        processableType: 'VoiceSession',
+        processableId: session.id,
+        apiType: 'AGENT_CHAT',
+        requestSummary: 'Listing extraction',
+        processingStatus: 'PROCESSING',
+        attempts: 1,
+        startedAt: new Date(),
       },
       select: { id: true },
     });
-    cropCategoryId = category?.id ?? null;
+
+    try {
+      const agentResult = await chatWithAgent(prompt);
+      chatId = agentResult.chatId;
+      parsedResult = parseExtraction(agentResult.content);
+
+      await prisma.aiProcessingRun.update({
+        where: { id: run.id },
+        data: {
+          processingStatus: parsedResult ? 'COMPLETED' : 'FAILED',
+          sessionId: agentResult.chatId,
+          responseContent: agentResult.content.slice(0, 2000),
+          errorMessage: parsedResult ? null : 'Agent response was not valid JSON',
+          httpStatus: parsedResult ? 200 : 422,
+          completedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      const appErr =
+        error instanceof AppError
+          ? error
+          : new AppError('Listing extraction failed', 502, 'AGENT_UNAVAILABLE');
+      await prisma.aiProcessingRun.update({
+        where: { id: run.id },
+        data: {
+          processingStatus: 'FAILED',
+          httpStatus: appErr.statusCode,
+          errorMessage: appErr.message,
+          completedAt: new Date(),
+        },
+      });
+    }
   }
-  if (!cropCategoryId) incompleteFields.push('cropCategory');
 
-  const titleBits = [quantity ?? '', unit ?? '', crop ?? 'Produce'].filter(Boolean);
-  const title = titleBits.join(' ').trim() || 'Draft listing';
+  if (!parsedResult) {
+    parsedResult = extractFromTranscriptLocally(transcriptBlock);
+  }
 
-  // The AI result is NEVER auto-published. Always create a DRAFT.
-  const listing = await prisma.produceListing.create({
-    data: {
-      farmerId: session.farmerId,
-      fieldAgentId: session.fieldAgentId,
-      voiceSessionId: session.id,
-      cropCategoryId,
-      title,
-      slug: uniqueSlug(crop ?? 'listing'),
-      description,
-      quantity: quantity ?? 0,
-      availableQuantity: quantity ?? 0,
-      unit,
-      pricePerUnit: pricePerUnit ?? 0,
-      availableDate: availableDate ? new Date(availableDate) : null,
-      status: ListingStatus.DRAFT,
-    },
-    select: {
-      uuid: true,
-      title: true,
-      slug: true,
-      description: true,
-      quantity: true,
-      unit: true,
-      pricePerUnit: true,
-      availableDate: true,
-      cropCategoryId: true,
-      status: true,
-      createdAt: true,
-    },
-  });
+  const { extracted, incompleteFields } = parsedResult;
+  const { listing, incompleteFields: draftIncomplete } = await createDraftListing(
+    session,
+    extracted,
+    incompleteFields
+  );
 
-  await prisma.aiProcessingRun.update({
-    where: { id: run.id },
-    data: {
-      processingStatus: 'COMPLETED',
-      sessionId: agentResult.chatId,
-      responseContent: agentResult.content.slice(0, 2000),
-      httpStatus: 200,
-      completedAt: new Date(),
-    },
-  });
-
-  const extracted: ExtractedListing = {
-    crop,
-    quantity,
-    unit,
-    pricePerUnit,
-    availableDate,
-    description,
+  return {
+    listing,
+    extracted,
+    incompleteFields: draftIncomplete,
+    chatId,
   };
-
-  return { listing, extracted, incompleteFields, chatId: agentResult.chatId };
 }

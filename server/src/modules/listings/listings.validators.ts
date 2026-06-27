@@ -19,6 +19,7 @@ export const createListingSchema = z.object({
   unit: unitSchema.optional(),
   pricePerUnit: z.coerce.number().positive().optional(),
   availableDate: z.coerce.date().optional(),
+  expiresAt: z.coerce.date().optional(),
   region: z.string().trim().max(80).optional(),
   community: z.string().trim().max(80).optional(),
 });
@@ -31,6 +32,7 @@ export const updateListingSchema = z.object({
   unit: unitSchema.optional(),
   pricePerUnit: z.coerce.number().positive().optional(),
   availableDate: z.coerce.date().optional(),
+  expiresAt: z.coerce.date().optional(),
   region: z.string().trim().max(80).optional(),
   community: z.string().trim().max(80).optional(),
   agentConfirmed: z.boolean().optional(),
